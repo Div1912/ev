@@ -1,36 +1,37 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { Building2, Loader2, ArrowRight } from 'lucide-react';
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import { Building2, Loader2, ArrowRight } from 'lucide-react'
 
-import { useAuth } from '@/contexts/AuthContext';
-import { useWallet } from '@/contexts/WalletContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext'
+import { useWallet } from '@/contexts/WalletContext'
+import { supabase } from '@/integrations/supabase/client'
+import { toast } from 'sonner'
 
-import PublicNavbar from '@/components/PublicNavbar';
-import BackButton from '@/components/BackButton';
+import PublicNavbar from '@/components/PublicNavbar'
+import BackButton from '@/components/BackButton'
 
 /**
- * INSTITUTION ONBOARDING (ONE-TIME)
+ * INSTITUTION ONBOARDING
  *
- * SECURITY GUARANTEES:
- * - Profile can be created ONLY ONCE
- * - No overwrite possible
- * - Immutable binding: user_id + wallet_address
- * - Existing profiles are hard-blocked
+ * Rules:
+ * - Profile MAY exist before onboarding (valid)
+ * - Only block if onboarded === true
+ * - Allow incomplete profiles to continue onboarding
  */
 const InstitutionOnboarding = () => {
-  const navigate = useNavigate();
-  const { user, refreshProfile } = useAuth();
-  const { wallet } = useWallet();
+  const navigate = useNavigate()
+  const { user, refreshProfile } = useAuth()
+  const { wallet } = useWallet()
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [existingProfile, setExistingProfile] = useState<any>(null)
+
   const [formData, setFormData] = useState({
     institutionName: '',
     institutionType: '',
     displayName: '',
-  });
+  })
 
   const institutionTypes = [
     'University',
@@ -39,120 +40,118 @@ const InstitutionOnboarding = () => {
     'Training Institute',
     'Certification Body',
     'Other',
-  ];
+  ]
 
   /**
-   * 🔐 PRE-CHECK:
-   * If profile already exists, block onboarding permanently.
+   * 🔍 Load profile once
+   * - Do NOT block if profile exists
+   * - Redirect only if already onboarded
    */
   useEffect(() => {
-    if (!user) return;
+    if (!user) return
 
-    const checkExistingProfile = async () => {
+    const loadProfile = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id')
+        .select('*')
         .eq('user_id', user.id)
-        .maybeSingle();
+        .maybeSingle()
 
       if (error) {
-        console.error('Profile check failed:', error);
-        return;
+        console.error('Profile fetch failed:', error)
+        return
       }
 
-      if (data) {
-        toast.info('Profile already exists');
-        navigate('/dashboard/institution', { replace: true });
+      if (data?.onboarded === true) {
+        navigate('/dashboard/institution', { replace: true })
+        return
       }
-    };
 
-    checkExistingProfile();
-  }, [user, navigate]);
+      setExistingProfile(data)
+    }
+
+    loadProfile()
+  }, [user, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
     if (!user) {
-      toast.error('Please sign in first');
-      navigate('/auth/sign-in');
-      return;
+      toast.error('Please sign in first')
+      navigate('/auth/sign-in')
+      return
     }
 
-    // 🔐 Wallet address is REQUIRED for immutable identity binding
     const walletAddress =
-      wallet.address || user.user_metadata?.wallet_address;
+      wallet.address || user.user_metadata?.wallet_address
 
     if (!walletAddress) {
-      toast.error('Wallet address not found. Please reconnect your wallet.');
-      return;
+      toast.error('Wallet address not found. Please reconnect your wallet.')
+      return
     }
 
-    setIsSubmitting(true);
+    setIsSubmitting(true)
 
     try {
       /**
-       * 🔐 FINAL SAFETY CHECK
-       * Prevent race conditions / manual bypass attempts
+       * 🚫 Block ONLY if already onboarded
        */
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existingProfile) {
-        toast.error('Profile already exists');
-        navigate('/dashboard/institution', { replace: true });
-        return;
+      if (existingProfile?.onboarded === true) {
+        navigate('/dashboard/institution', { replace: true })
+        return
       }
 
       /**
-       * ✅ CREATE PROFILE (PURE INSERT)
-       * ❌ NO UPSERT
-       * ❌ NO UPDATE
+       * 🔁 CONDITIONAL PROFILE LOGIC
        */
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
+      if (existingProfile) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            role: 'issuer',
+            display_name: formData.displayName,
+            institution: formData.institutionName,
+            institution_type: formData.institutionType,
+          })
+          .eq('user_id', user.id)
+
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('profiles').insert({
           user_id: user.id,
           wallet_address: walletAddress.toLowerCase(),
           role: 'issuer',
           display_name: formData.displayName,
           institution: formData.institutionName,
           institution_type: formData.institutionType,
-        });
+          onboarded: false,
+        })
 
-      if (profileError) throw profileError;
+        if (error) throw error
+      }
 
       /**
-       * ✅ ASSIGN ROLE (SAFE & IDEMPOTENT)
-       * Roles table does not store identity-critical data
+       * ✅ Assign role (safe & idempotent)
        */
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
-          {
-            user_id: user.id,
-            role: 'issuer',
-          },
-          {
-            onConflict: 'user_id,role',
-            ignoreDuplicates: true,
-          }
-        );
+          { user_id: user.id, role: 'issuer' },
+          { onConflict: 'user_id,role', ignoreDuplicates: true }
+        )
 
-      if (roleError) throw roleError;
+      if (roleError) throw roleError
 
-      await refreshProfile();
-      toast.success('Institution registered successfully!');
-      navigate('/dashboard/institution');
-    } catch (error) {
-      console.error('Institution onboarding error:', error);
-      toast.error('Failed to complete registration. Please try again.');
+      await refreshProfile()
+      toast.success('Institution registered successfully!')
+      navigate('/dashboard/institution')
+    } catch (err) {
+      console.error('Institution onboarding error:', err)
+      toast.error('Failed to complete registration. Please try again.')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -183,65 +182,41 @@ const InstitutionOnboarding = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Institution Name <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.institutionName}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      institutionName: e.target.value,
-                    })
-                  }
-                  className="input-glass"
-                  required
-                />
-              </div>
+              <input
+                className="input-glass"
+                placeholder="Institution Name"
+                value={formData.institutionName}
+                onChange={(e) =>
+                  setFormData({ ...formData, institutionName: e.target.value })
+                }
+                required
+              />
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Institution Type <span className="text-destructive">*</span>
-                </label>
-                <select
-                  value={formData.institutionType}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      institutionType: e.target.value,
-                    })
-                  }
-                  className="input-glass"
-                  required
-                >
-                  <option value="">Select institution type</option>
-                  {institutionTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <select
+                className="input-glass"
+                value={formData.institutionType}
+                onChange={(e) =>
+                  setFormData({ ...formData, institutionType: e.target.value })
+                }
+                required
+              >
+                <option value="">Select institution type</option>
+                {institutionTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Your Name <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.displayName}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      displayName: e.target.value,
-                    })
-                  }
-                  className="input-glass"
-                  required
-                />
-              </div>
+              <input
+                className="input-glass"
+                placeholder="Your Name"
+                value={formData.displayName}
+                onChange={(e) =>
+                  setFormData({ ...formData, displayName: e.target.value })
+                }
+                required
+              />
 
               <button
                 type="submit"
@@ -270,7 +245,7 @@ const InstitutionOnboarding = () => {
         </motion.div>
       </main>
     </div>
-  );
-};
+  )
+}
 
-export default InstitutionOnboarding;
+export default InstitutionOnboarding
