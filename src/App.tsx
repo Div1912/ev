@@ -20,6 +20,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminUsers from "./pages/admin/Users";
 import AdminInstitutions from "./pages/admin/Institutions";
 import AdminSettings from "./pages/admin/Settings";
+import RoleManagement from "./pages/admin/RoleManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -95,6 +96,11 @@ const App = () => (
               <Route path="/admin/settings" element={
                 <ProtectedRoute requiredRole="admin">
                   <AdminSettings />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/roles" element={
+                <ProtectedRoute requiredRole="admin">
+                  <RoleManagement />
                 </ProtectedRoute>
               } />
               

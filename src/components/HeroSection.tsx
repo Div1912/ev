@@ -137,17 +137,17 @@ const HeroSection = () => {
             transition={{ duration: 0.6, delay: 0.5 }}
             className="glass-card p-8 md:p-10"
           >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
               {stats.map((stat, index) => (
                 <motion.div
                   key={stat.label}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 0.6 + index * 0.1 }}
-                  className="stat-item"
+                  className="stat-item p-3 sm:p-4 md:p-6"
                 >
-                  <div className="value">{stat.value}</div>
-                  <div className="label">{stat.label}</div>
+                  <div className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold gradient-text break-words">{stat.value}</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground mt-1 sm:mt-2">{stat.label}</div>
                 </motion.div>
               ))}
             </div>

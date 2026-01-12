@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { GraduationCap, Building2, Search, Shield, ArrowRight, Lock, AlertCircle } from 'lucide-react';
+import { GraduationCap, Building2, Search, Shield, ArrowRight, Lock, AlertCircle, UserPlus } from 'lucide-react';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
 import BackButton from '@/components/BackButton';
+import RoleRequestModal from '@/components/RoleRequestModal';
 
 const RoleSelectPage = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const RoleSelectPage = () => {
   const { user, roles, hasRole, isLoading } = useAuth();
   const [showUnauthorizedAlert, setShowUnauthorizedAlert] = useState(false);
   const [requiredRole, setRequiredRole] = useState<string | null>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   // Check if redirected from unauthorized access
   useEffect(() => {
@@ -179,11 +181,29 @@ const RoleSelectPage = () => {
             })}
           </div>
 
+          {/* Request Role Button */}
+          {user && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="flex justify-center mt-8"
+            >
+              <button
+                onClick={() => setShowRequestModal(true)}
+                className="btn-secondary"
+              >
+                <UserPlus className="w-4 h-4" />
+                Request Additional Role
+              </button>
+            </motion.div>
+          )}
+
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-center text-sm text-muted-foreground mt-8"
+            transition={{ delay: 0.6 }}
+            className="text-center text-sm text-muted-foreground mt-6"
           >
             {user 
               ? 'Roles are managed by platform administrators.'
@@ -191,6 +211,12 @@ const RoleSelectPage = () => {
             }
           </motion.p>
         </div>
+
+        {/* Role Request Modal */}
+        <RoleRequestModal
+          isOpen={showRequestModal}
+          onClose={() => setShowRequestModal(false)}
+        />
       </main>
     </div>
   );
