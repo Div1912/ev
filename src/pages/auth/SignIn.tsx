@@ -58,7 +58,7 @@ const SignInPage = () => {
     
     setAuthStep('signing');
     try {
-      await authenticateWallet();
+      await authenticateWallet(wallet.address);
       setAuthStep('complete');
       // Redirect will be handled by useEffect
     } catch (err) {
