@@ -15,9 +15,9 @@ import BackButton from '@/components/BackButton'
  * INSTITUTION ONBOARDING
  *
  * Rules:
- * - Profile MAY exist before onboarding (valid)
- * - Only block if onboarded === true
- * - Allow incomplete profiles to continue onboarding
+ * - Profile MAY exist before onboarding
+ * - Block ONLY if onboarded === true
+ * - Must be safe on refresh / retry
  */
 const InstitutionOnboarding = () => {
   const navigate = useNavigate()
@@ -44,8 +44,6 @@ const InstitutionOnboarding = () => {
 
   /**
    * 🔍 Load profile once
-   * - Do NOT block if profile exists
-   * - Redirect only if already onboarded
    */
   useEffect(() => {
     if (!user) return
@@ -76,6 +74,9 @@ const InstitutionOnboarding = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // 🔐 HARD SUBMIT LOCK
+    if (isSubmitting) return
+
     if (!user) {
       toast.error('Please sign in first')
       navigate('/auth/sign-in')
@@ -102,7 +103,7 @@ const InstitutionOnboarding = () => {
       }
 
       /**
-       * 🔁 CONDITIONAL PROFILE LOGIC
+       * 🔁 UPDATE or INSERT (IDEMPOTENT)
        */
       if (existingProfile) {
         const { error } = await supabase
@@ -117,17 +118,24 @@ const InstitutionOnboarding = () => {
 
         if (error) throw error
       } else {
-        const { error } = await supabase.from('profiles').insert({
-          user_id: user.id,
-          wallet_address: walletAddress.toLowerCase(),
-          role: 'issuer',
-          display_name: formData.displayName,
-          institution: formData.institutionName,
-          institution_type: formData.institutionType,
-          onboarded: false,
-        })
+        const { data, error } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: user.id,
+            wallet_address: walletAddress.toLowerCase(),
+            role: 'issuer',
+            display_name: formData.displayName,
+            institution: formData.institutionName,
+            institution_type: formData.institutionType,
+            onboarded: false,
+          })
+          .select()
+          .single()
 
         if (error) throw error
+
+        // 🔁 sync local state
+        setExistingProfile(data)
       }
 
       /**
@@ -144,7 +152,7 @@ const InstitutionOnboarding = () => {
 
       await refreshProfile()
       toast.success('Institution registered successfully!')
-      navigate('/dashboard/institution')
+      navigate('/dashboard/institution', { replace: true })
     } catch (err) {
       console.error('Institution onboarding error:', err)
       toast.error('Failed to complete registration. Please try again.')
