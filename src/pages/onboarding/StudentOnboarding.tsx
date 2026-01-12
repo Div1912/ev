@@ -1,35 +1,36 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Loader2, ArrowRight } from 'lucide-react';
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import { GraduationCap, Loader2, ArrowRight } from 'lucide-react'
 
-import { useAuth } from '@/contexts/AuthContext';
-import { useWallet } from '@/contexts/WalletContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext'
+import { useWallet } from '@/contexts/WalletContext'
+import { supabase } from '@/integrations/supabase/client'
+import { toast } from 'sonner'
 
-import PublicNavbar from '@/components/PublicNavbar';
-import BackButton from '@/components/BackButton';
+import PublicNavbar from '@/components/PublicNavbar'
+import BackButton from '@/components/BackButton'
 
 /**
- * STUDENT ONBOARDING (ONE-TIME)
+ * STUDENT ONBOARDING
  *
- * SECURITY GUARANTEES:
- * - Profile can be created ONLY ONCE
- * - No overwrite possible
- * - Immutable binding: user_id + wallet_address
- * - Existing profiles are hard-blocked
+ * Rules:
+ * - Profile MAY exist before onboarding (valid)
+ * - Only block if onboarded === true
+ * - Allow incomplete profiles to continue onboarding
  */
 const StudentOnboarding = () => {
-  const navigate = useNavigate();
-  const { user, refreshProfile } = useAuth();
-  const { wallet } = useWallet();
+  const navigate = useNavigate()
+  const { user, refreshProfile } = useAuth()
+  const { wallet } = useWallet()
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [existingProfile, setExistingProfile] = useState<any>(null)
+
   const [formData, setFormData] = useState({
     displayName: '',
     educationLevel: '',
-  });
+  })
 
   const educationLevels = [
     'High School',
@@ -38,119 +39,118 @@ const StudentOnboarding = () => {
     'Doctorate',
     'Professional Certificate',
     'Other',
-  ];
+  ]
 
   /**
-   * 🔐 PRE-CHECK:
-   * If a profile already exists, redirect immediately.
-   * Prevents re-onboarding & overwrite attempts.
+   * 🔍 Fetch profile ONCE
+   * - Do NOT block if profile exists
+   * - Only redirect if already onboarded
    */
   useEffect(() => {
-    if (!user) return;
+    if (!user) return
 
-    const checkExistingProfile = async () => {
+    const loadProfile = async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id')
+        .select('*')
         .eq('user_id', user.id)
-        .maybeSingle();
+        .maybeSingle()
 
       if (error) {
-        console.error('Profile check failed:', error);
-        return;
+        console.error('Profile fetch failed:', error)
+        return
       }
 
-      if (data) {
-        toast.info('Profile already exists');
-        navigate('/dashboard/student', { replace: true });
+      if (data?.onboarded === true) {
+        navigate('/dashboard/student', { replace: true })
+        return
       }
-    };
 
-    checkExistingProfile();
-  }, [user, navigate]);
+      setExistingProfile(data)
+    }
+
+    loadProfile()
+  }, [user, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
     if (!user) {
-      toast.error('Please sign in first');
-      navigate('/auth/sign-in');
-      return;
+      toast.error('Please sign in first')
+      navigate('/auth/sign-in')
+      return
     }
 
-    // 🔐 Wallet address is REQUIRED for immutable identity binding
     const walletAddress =
-      wallet.address || user.user_metadata?.wallet_address;
+      wallet.address || user.user_metadata?.wallet_address
 
     if (!walletAddress) {
-      toast.error('Wallet address not found. Please reconnect your wallet.');
-      return;
+      toast.error('Wallet address not found. Please reconnect your wallet.')
+      return
     }
 
-    setIsSubmitting(true);
+    setIsSubmitting(true)
 
     try {
       /**
-       * 🔐 FINAL SAFETY CHECK (server-side)
-       * Prevent race conditions / bypass attempts
+       * 🚫 HARD BLOCK only if already onboarded
        */
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existingProfile) {
-        toast.error('Profile already exists');
-        navigate('/dashboard/student', { replace: true });
-        return;
+      if (existingProfile?.onboarded === true) {
+        navigate('/dashboard/student', { replace: true })
+        return
       }
 
       /**
-       * ✅ CREATE PROFILE (PURE INSERT)
-       * ❌ NO UPSERT
-       * ❌ NO UPDATE
+       * 🔁 CONDITIONAL LOGIC
+       * - UPDATE if profile exists (but incomplete)
+       * - INSERT if profile does not exist
        */
-      const { error: profileError } = await supabase.from('profiles').insert({
-        user_id: user.id,
-        wallet_address: walletAddress.toLowerCase(),
-        role: 'student',
-        display_name: formData.displayName,
-        education_level: formData.educationLevel,
-        institution: null,
-      });
+      if (existingProfile) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            role: 'student',
+            display_name: formData.displayName,
+            education_level: formData.educationLevel,
+          })
+          .eq('user_id', user.id)
 
-      if (profileError) throw profileError;
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('profiles').insert({
+          user_id: user.id,
+          wallet_address: walletAddress.toLowerCase(),
+          role: 'student',
+          display_name: formData.displayName,
+          education_level: formData.educationLevel,
+          onboarded: false,
+        })
+
+        if (error) throw error
+      }
 
       /**
-       * ✅ ASSIGN ROLE (IDEMPOTENT & SAFE)
-       * Role table does NOT store identity-critical data
+       * ✅ Assign role (safe + idempotent)
        */
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
-          {
-            user_id: user.id,
-            role: 'student',
-          },
-          {
-            onConflict: 'user_id,role',
-            ignoreDuplicates: true,
-          }
-        );
+          { user_id: user.id, role: 'student' },
+          { onConflict: 'user_id,role', ignoreDuplicates: true }
+        )
 
-      if (roleError) throw roleError;
+      if (roleError) throw roleError
 
-      await refreshProfile();
-      toast.success('Welcome to EduVerify!');
-      navigate('/dashboard/student');
-    } catch (error) {
-      console.error('Onboarding error:', error);
-      toast.error('Failed to complete onboarding. Please try again.');
+      await refreshProfile()
+      toast.success('Welcome to EduVerify!')
+      navigate('/dashboard/student')
+    } catch (err) {
+      console.error('Onboarding error:', err)
+      toast.error('Failed to complete onboarding. Please try again.')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  };
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -189,12 +189,8 @@ const StudentOnboarding = () => {
                   type="text"
                   value={formData.displayName}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      displayName: e.target.value,
-                    })
+                    setFormData({ ...formData, displayName: e.target.value })
                   }
-                  placeholder="Enter your full name"
                   className="input-glass"
                   required
                 />
@@ -236,7 +232,7 @@ const StudentOnboarding = () => {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Creating Profile...
+                    Saving Profile...
                   </>
                 ) : (
                   <>
@@ -250,7 +246,7 @@ const StudentOnboarding = () => {
         </motion.div>
       </main>
     </div>
-  );
-};
+  )
+}
 
-export default StudentOnboarding;
+export default StudentOnboarding
