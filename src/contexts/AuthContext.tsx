@@ -55,30 +55,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [error, setError] = useState<string | null>(null)
 
   /* ------------------------------------------------------------------
-   * Helpers (READ-ONLY)
+   * READ-ONLY DB FETCHERS
    * ------------------------------------------------------------------ */
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
+    const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle()
 
+    if (error) {
+      console.error("Profile fetch failed:", error)
+      return null
+    }
+
     return data as Profile | null
   }
 
-  const fetchRoles = async (userId: string) => {
-    const { data } = await supabase
+  const fetchRoles = async (userId: string): Promise<UserRole[]> => {
+    const { data, error } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
 
-    return (data || []).map((r) => r.role as UserRole)
+    if (error) {
+      console.error("Roles fetch failed:", error)
+      return []
+    }
+
+    return (data ?? []).map((r) => r.role as UserRole)
   }
 
   /* ------------------------------------------------------------------
-   * Public API
+   * PUBLIC API
    * ------------------------------------------------------------------ */
 
   const refreshProfile = async (userId?: string) => {
@@ -93,8 +103,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setProfile(profileData)
       setRoles(rolesData)
-    } catch {
-      setError("Failed to refresh profile")
+    } catch (err) {
+      console.error("refreshProfile failed:", err)
+      setError("Failed to load profile")
     }
   }
 
@@ -108,7 +119,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     try {
       await authenticateWithWallet(wallet.address)
-      // Supabase session handled by auth listener
+      // Supabase auth listener will handle session
+    } catch (err) {
+      setError("Authentication failed")
+      throw err
     } finally {
       setIsAuthenticating(false)
     }
@@ -117,10 +131,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signOut = async () => {
     setIsLoading(true)
     await supabase.auth.signOut()
+
     setUser(null)
     setSession(null)
     setProfile(null)
     setRoles([])
+
     setIsLoading(false)
   }
 
@@ -129,13 +145,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isOnboarded = profile?.onboarded === true
 
   /* ------------------------------------------------------------------
-   * Auth lifecycle
+   * AUTH LIFECYCLE (SINGLE SOURCE OF TRUTH)
    * ------------------------------------------------------------------ */
 
   useEffect(() => {
     let mounted = true
 
     const initialize = async () => {
+      setIsLoading(true)
+
       const {
         data: { session },
       } = await supabase.auth.getSession()
@@ -147,6 +165,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (session?.user) {
         await refreshProfile(session.user.id)
+      } else {
+        setProfile(null)
+        setRoles([])
       }
 
       setIsLoading(false)
@@ -157,6 +178,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!mounted) return
+
+        setIsLoading(true)
 
         setSession(session)
         setUser(session?.user ?? null)
