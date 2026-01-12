@@ -1,6 +1,5 @@
 "use client"
 
-import type React from "react"
 import {
   createContext,
   useContext,
@@ -42,7 +41,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { wallet } = useWallet()
 
   const [user, setUser] = useState<User | null>(null)
@@ -54,106 +53,70 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  /* ------------------------------------------------------------------
-   * READ-ONLY DB FETCHERS
-   * ------------------------------------------------------------------ */
+  /* ---------------- READ ONLY FETCHERS ---------------- */
 
-  const fetchProfile = async (userId: string): Promise<Profile | null> => {
-    const { data, error } = await supabase
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle()
 
-    if (error) {
-      console.error("Profile fetch failed:", error)
-      return null
-    }
-
     return data as Profile | null
   }
 
-  const fetchRoles = async (userId: string): Promise<UserRole[]> => {
-    const { data, error } = await supabase
+  const fetchRoles = async (userId: string) => {
+    const { data } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
 
-    if (error) {
-      console.error("Roles fetch failed:", error)
-      return []
-    }
-
     return (data ?? []).map((r) => r.role as UserRole)
   }
 
-  /* ------------------------------------------------------------------
-   * PUBLIC API
-   * ------------------------------------------------------------------ */
+  /* ---------------- PUBLIC API ---------------- */
 
   const refreshProfile = async (userId?: string) => {
     const uid = userId ?? user?.id
     if (!uid) return
 
-    try {
-      const [profileData, rolesData] = await Promise.all([
-        fetchProfile(uid),
-        fetchRoles(uid),
-      ])
+    const [profileData, rolesData] = await Promise.all([
+      fetchProfile(uid),
+      fetchRoles(uid),
+    ])
 
-      setProfile(profileData)
-      setRoles(rolesData)
-    } catch (err) {
-      console.error("refreshProfile failed:", err)
-      setError("Failed to load profile")
-    }
+    setProfile(profileData)
+    setRoles(rolesData)
   }
 
   const authenticateWallet = async () => {
-    if (!wallet.address) {
-      throw new Error("Wallet not connected")
-    }
+    if (!wallet.address) throw new Error("Wallet not connected")
 
     setIsAuthenticating(true)
-    setError(null)
-
     try {
       await authenticateWithWallet(wallet.address)
-      // Supabase auth listener will handle session
-    } catch (err) {
-      setError("Authentication failed")
-      throw err
     } finally {
       setIsAuthenticating(false)
     }
   }
 
   const signOut = async () => {
-    setIsLoading(true)
     await supabase.auth.signOut()
-
     setUser(null)
     setSession(null)
     setProfile(null)
     setRoles([])
-
-    setIsLoading(false)
   }
 
   const hasRole = (role: UserRole) => roles.includes(role)
-
   const isOnboarded = profile?.onboarded === true
 
-  /* ------------------------------------------------------------------
-   * AUTH LIFECYCLE (SINGLE SOURCE OF TRUTH)
-   * ------------------------------------------------------------------ */
+  /* ---------------- AUTH LIFECYCLE ---------------- */
 
   useEffect(() => {
     let mounted = true
 
     const initialize = async () => {
-      setIsLoading(true)
-
       const {
         data: { session },
       } = await supabase.auth.getSession()
@@ -179,8 +142,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       async (_event, session) => {
         if (!mounted) return
 
-        setIsLoading(true)
-
         setSession(session)
         setUser(session?.user ?? null)
 
@@ -190,8 +151,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setProfile(null)
           setRoles([])
         }
-
-        setIsLoading(false)
       }
     )
 
@@ -223,10 +182,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   )
 }
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider")
   return ctx
 }
