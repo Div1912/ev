@@ -25,8 +25,10 @@ const ProtectedRoute = ({
   const location = useLocation()
   const path = location.pathname
 
-  /* WAIT UNTIL AUTH + PROFILE ARE READY */
-  if (isLoading || !profileLoaded) {
+  /* --------------------------------------------------
+   * HARD STOP: WAIT FOR AUTH BOOTSTRAP
+   * -------------------------------------------------- */
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" />
@@ -34,29 +36,51 @@ const ProtectedRoute = ({
     )
   }
 
-  /* AUTH */
+  /* --------------------------------------------------
+   * AUTH REQUIRED
+   * -------------------------------------------------- */
   if (requireAuth && !user) {
     return <Navigate to="/auth/sign-in" replace />
   }
 
-  /* FORCE ONBOARDING */
-  if (user && !isOnboarded) {
+  /* --------------------------------------------------
+   * PROFILE NOT READY (ONLY AFTER USER EXISTS)
+   * -------------------------------------------------- */
+  if (user && !profileLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    )
+  }
+
+  /* --------------------------------------------------
+   * FORCE ONBOARDING (NEW USERS)
+   * -------------------------------------------------- */
+  if (user && profileLoaded && !isOnboarded) {
     if (!path.startsWith("/onboarding")) {
       return <Navigate to="/onboarding/select-role" replace />
     }
     return <>{children}</>
   }
 
-  /* BLOCK ONBOARDING AFTER COMPLETE */
+  /* --------------------------------------------------
+   * BLOCK ONBOARDING AFTER COMPLETION
+   * -------------------------------------------------- */
   if (user && isOnboarded && path.startsWith("/onboarding")) {
     return <Navigate to={`/dashboard/${roles[0]}`} replace />
   }
 
-  /* ROLE CHECK */
+  /* --------------------------------------------------
+   * ROLE AUTHORIZATION
+   * -------------------------------------------------- */
   if (requiredRole && !hasRole(requiredRole)) {
     return <Navigate to={`/dashboard/${roles[0]}`} replace />
   }
 
+  /* --------------------------------------------------
+   * ACCESS GRANTED
+   * -------------------------------------------------- */
   return <>{children}</>
 }
 
