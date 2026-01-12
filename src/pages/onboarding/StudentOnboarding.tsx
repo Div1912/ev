@@ -39,26 +39,31 @@ const StudentOnboarding = () => {
       // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
-          wallet_address: wallet.address.toLowerCase(),
-          role: 'student',
-          display_name: formData.displayName,
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            wallet_address: wallet.address.toLowerCase(),
+            role: 'student',
+            display_name: formData.displayName,
+            institution: null,
+          },
+          { onConflict: 'user_id' }
+        );
 
       if (profileError) throw profileError;
 
-      // Add student role
+      // Add student role (idempotent)
       const { error: roleError } = await supabase
         .from('user_roles')
-        .insert({
-          user_id: user.id,
-          role: 'student',
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            role: 'student',
+          },
+          { onConflict: 'user_id,role' }
+        );
 
-      if (roleError && !roleError.message.includes('duplicate')) {
-        throw roleError;
-      }
+      if (roleError) throw roleError;
 
       await refreshProfile();
       toast.success('Welcome to EduVerify!');
@@ -104,7 +109,9 @@ const StudentOnboarding = () => {
                 <input
                   type="text"
                   value={formData.displayName}
-                  onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, displayName: e.target.value })
+                  }
                   placeholder="Enter your full name"
                   className="input-glass"
                   required
@@ -117,20 +124,31 @@ const StudentOnboarding = () => {
                 </label>
                 <select
                   value={formData.educationLevel}
-                  onChange={(e) => setFormData({ ...formData, educationLevel: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      educationLevel: e.target.value,
+                    })
+                  }
                   className="input-glass"
                   required
                 >
                   <option value="">Select your education level</option>
                   {educationLevels.map((level) => (
-                    <option key={level} value={level}>{level}</option>
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <button
                 type="submit"
-                disabled={isSubmitting || !formData.displayName || !formData.educationLevel}
+                disabled={
+                  isSubmitting ||
+                  !formData.displayName ||
+                  !formData.educationLevel
+                }
                 className="w-full btn-primary"
               >
                 {isSubmitting ? (
