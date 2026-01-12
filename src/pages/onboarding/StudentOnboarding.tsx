@@ -7,6 +7,7 @@ import { useWallet } from '@/contexts/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import PublicNavbar from '@/components/PublicNavbar';
+import BackButton from '@/components/BackButton';
 
 const StudentOnboarding = () => {
   const navigate = useNavigate();
@@ -29,8 +30,16 @@ const StudentOnboarding = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !wallet.address) {
-      toast.error('Please connect your wallet and sign in first');
+    if (!user) {
+      toast.error('Please sign in first');
+      navigate('/login');
+      return;
+    }
+
+    // Get wallet address from user metadata if not connected via context
+    const walletAddress = wallet.address || user.user_metadata?.wallet_address;
+    if (!walletAddress) {
+      toast.error('Wallet address not found. Please reconnect your wallet.');
       return;
     }
 
@@ -42,7 +51,7 @@ const StudentOnboarding = () => {
         .upsert(
           {
             user_id: user.id,
-            wallet_address: wallet.address.toLowerCase(),
+            wallet_address: walletAddress.toLowerCase(),
             role: 'student',
             display_name: formData.displayName,
             institution: null,
@@ -53,6 +62,7 @@ const StudentOnboarding = () => {
       if (profileError) throw profileError;
 
       // Add student role (idempotent)
+      // NOTE: use ignoreDuplicates to avoid UPDATE on conflict (which is blocked by RLS).
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
@@ -60,7 +70,7 @@ const StudentOnboarding = () => {
             user_id: user.id,
             role: 'student',
           },
-          { onConflict: 'user_id,role' }
+          { onConflict: 'user_id,role', ignoreDuplicates: true }
         );
 
       if (roleError) throw roleError;
@@ -88,6 +98,7 @@ const StudentOnboarding = () => {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md"
         >
+          <BackButton to="/onboarding/select-role" label="Back" />
           <div className="glass-card p-8 md:p-10">
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 mb-6">
