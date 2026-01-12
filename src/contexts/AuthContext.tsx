@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react"
 import { supabase } from "@/integrations/supabase/client"
+import { authenticateWithWallet } from "@/lib/walletAuth"
 import type { User, Session } from "@supabase/supabase-js"
 
 export type UserRole = "student" | "issuer" | "verifier" | "admin"
@@ -30,6 +31,7 @@ interface AuthContextType {
   isLoading: boolean
   profileLoaded: boolean
   isOnboarded: boolean
+  authenticateWallet: (walletAddress: string) => Promise<void>
   refreshProfile: () => Promise<void>
   hasRole: (role: UserRole) => boolean
   signOut: () => Promise<void>
@@ -47,7 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [profileLoaded, setProfileLoaded] = useState(false)
 
-  /* ---------------- FETCHERS ---------------- */
+  /* ---------------- PROFILE ---------------- */
 
   const refreshProfile = async () => {
     if (!user) {
@@ -56,6 +58,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setProfileLoaded(true)
       return
     }
+
+    setProfileLoaded(false)
 
     try {
       const [{ data: profileData }, { data: rolesData }] =
@@ -78,7 +82,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  /* ---------------- AUTH LIFECYCLE ---------------- */
+  /* ---------------- WALLET AUTH ---------------- */
+
+  const authenticateWallet = async (walletAddress: string) => {
+    if (!walletAddress) throw new Error("Wallet address missing")
+    await authenticateWithWallet(walletAddress)
+  }
+
+  /* ---------------- AUTH BOOTSTRAP ---------------- */
 
   useEffect(() => {
     let mounted = true
@@ -93,19 +104,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session)
       setUser(session?.user ?? null)
       setIsLoading(false)
+
+      if (!session?.user) {
+        setProfileLoaded(true)
+      }
     }
 
     init()
 
-    const { data } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!mounted) return
+    const { data } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (!mounted) return
 
+      setSession(session)
+      setUser(session?.user ?? null)
+
+      if (!session?.user) {
+        setProfile(null)
+        setRoles([])
+        setProfileLoaded(true)
+      } else {
         setProfileLoaded(false)
-        setSession(session)
-        setUser(session?.user ?? null)
       }
-    )
+    })
 
     return () => {
       mounted = false
@@ -114,8 +134,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [])
 
   useEffect(() => {
-    if (!isLoading) refreshProfile()
+    if (!isLoading && user) {
+      refreshProfile()
+    }
   }, [user, isLoading])
+
+  /* ---------------- HELPERS ---------------- */
 
   const signOut = async () => {
     await supabase.auth.signOut()
@@ -123,6 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setSession(null)
     setProfile(null)
     setRoles([])
+    setProfileLoaded(true)
   }
 
   const hasRole = (role: UserRole) => roles.includes(role)
@@ -138,6 +163,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading,
         profileLoaded,
         isOnboarded,
+        authenticateWallet,
         refreshProfile,
         hasRole,
         signOut,
