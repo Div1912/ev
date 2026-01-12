@@ -27,6 +27,7 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticating: boolean
   error: string | null
+  isOnboarded: boolean
   authenticateWallet: () => Promise<void>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -165,6 +166,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }
 
+  const isOnboarded = profile?.onboarded === true
+
   useEffect(() => {
     let mounted = true
 
@@ -225,6 +228,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoading,
         isAuthenticating,
         error,
+        isOnboarded,
         authenticateWallet,
         signOut,
         refreshProfile,
