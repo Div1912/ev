@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
 import { Wallet, ArrowRight, Shield, AlertCircle, GraduationCap } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import BackButton from '@/components/BackButton';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -31,9 +32,13 @@ const LoginPage = () => {
     <div className="min-h-screen flex flex-col">
       <Navbar />
       
-      <main className="flex-1 flex items-center justify-center pt-20 pb-16 px-4">
+      <main className="flex-1 flex flex-col pt-20 pb-16 px-4">
+        <div className="container mx-auto max-w-md">
+          <BackButton to="/" label="Back to Home" />
+        </div>
         {/* Background effects */}
         <div className="hero-glow" />
+        <div className="flex-1 flex items-center justify-center">
         <div className="glow-orb w-96 h-96 -top-48 -right-48 opacity-30" />
         
         <motion.div
@@ -149,6 +154,7 @@ const LoginPage = () => {
             </div>
           </div>
         </motion.div>
+        </div>
       </main>
     </div>
   );

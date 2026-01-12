@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Building2, Search, Shield, ArrowRight } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import BackButton from '@/components/BackButton';
 
 const RoleSelectPage = () => {
   const navigate = useNavigate();
@@ -45,11 +46,12 @@ const RoleSelectPage = () => {
     <div className="min-h-screen flex flex-col">
       <Navbar />
       
-      <main className="flex-1 flex items-center justify-center pt-24 pb-16 px-4">
+      <main className="flex-1 pt-24 pb-16 px-4">
         {/* Background effects */}
         <div className="hero-glow" />
         
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-4xl mx-auto">
+          <BackButton to="/login" label="Back to Login" />
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

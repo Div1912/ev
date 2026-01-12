@@ -10,7 +10,9 @@ import {
   Download,
   ExternalLink,
   Plus,
-  ArrowRight
+  ArrowRight,
+  Sparkles,
+  FolderOpen
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
@@ -81,7 +83,7 @@ const StudentDashboard = () => {
             transition={{ delay: 0.1 }}
             className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
           >
-            {stats.map((stat, index) => (
+            {stats.map((stat) => (
               <div key={stat.label} className="glass-card p-5">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -102,7 +104,7 @@ const StudentDashboard = () => {
           >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold">Your Credentials</h2>
-              <Link to="/verify" className="text-sm text-primary hover:underline flex items-center gap-1">
+              <Link to="/student/credentials" className="text-sm text-primary hover:underline flex items-center gap-1">
                 View all <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
@@ -170,34 +172,44 @@ const StudentDashboard = () => {
             className="mt-12"
           >
             <h2 className="text-xl font-semibold mb-6">Quick Actions</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Link to="/verify" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Link to="/student/credentials" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
                 <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <FileCheck className="w-6 h-6 text-blue-400" />
+                  <FolderOpen className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">All Credentials</h3>
+                  <p className="text-sm text-muted-foreground">View & manage</p>
+                </div>
+              </Link>
+
+              <Link to="/student/resume-builder" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">AI Resume Builder</h3>
+                  <p className="text-sm text-muted-foreground">Generate resume</p>
+                </div>
+              </Link>
+              
+              <Link to="/verify" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FileCheck className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
                   <h3 className="font-medium mb-1">Verify Credential</h3>
                   <p className="text-sm text-muted-foreground">Check any certificate</p>
                 </div>
               </Link>
-              
+
               <button className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all text-left">
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Share2 className="w-6 h-6 text-purple-400" />
+                <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Share2 className="w-6 h-6 text-orange-400" />
                 </div>
                 <div>
                   <h3 className="font-medium mb-1">Share Credentials</h3>
                   <p className="text-sm text-muted-foreground">Generate share link</p>
-                </div>
-              </button>
-
-              <button className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all text-left">
-                <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Download className="w-6 h-6 text-green-400" />
-                </div>
-                <div>
-                  <h3 className="font-medium mb-1">Download All</h3>
-                  <p className="text-sm text-muted-foreground">Export as PDF</p>
                 </div>
               </button>
             </div>

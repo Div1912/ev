@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
-import { formatAddress } from '@/lib/web3';
+import { formatAddress, mintCertificate } from '@/lib/web3';
 import { 
   Building2, 
   FileCheck, 
@@ -12,12 +13,15 @@ import {
   Search,
   ArrowRight,
   CheckCircle,
-  XCircle,
-  Loader2
+  Loader2,
+  FolderOpen,
+  TrendingUp
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import { toast } from 'sonner';
 
 const IssuerDashboard = () => {
+  const navigate = useNavigate();
   const { wallet } = useWallet();
   const [isIssuing, setIsIssuing] = useState(false);
   const [showIssueForm, setShowIssueForm] = useState(false);
@@ -72,9 +76,23 @@ const IssuerDashboard = () => {
     e.preventDefault();
     setIsIssuing(true);
     
-    // Simulate blockchain transaction
-    setTimeout(() => {
-      setIsIssuing(false);
+    try {
+      if (wallet.isConnected) {
+        const certificateURI = 'ipfs://QmExample...';
+        await mintCertificate(
+          formData.recipientAddress,
+          formData.studentName,
+          formData.degree,
+          formData.university,
+          certificateURI
+        );
+        toast.success('Credential issued successfully!');
+      } else {
+        // Demo mode
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        toast.success('Credential issued successfully! (Demo Mode)');
+      }
+      
       setShowIssueForm(false);
       setFormData({
         recipientAddress: '',
@@ -82,8 +100,12 @@ const IssuerDashboard = () => {
         degree: '',
         university: 'Massachusetts Institute of Technology',
       });
-      // Show success toast here
-    }, 2000);
+    } catch (error) {
+      console.error('Failed to issue credential:', error);
+      toast.error('Failed to issue credential. Please try again.');
+    } finally {
+      setIsIssuing(false);
+    }
   };
 
   return (
@@ -107,13 +129,13 @@ const IssuerDashboard = () => {
                   {wallet.address ? formatAddress(wallet.address) : 'Demo Mode'} • Issue and manage credentials
                 </p>
               </div>
-              <button
-                onClick={() => setShowIssueForm(true)}
+              <Link
+                to="/issuer/issue"
                 className="btn-primary w-full sm:w-auto"
               >
                 <Plus className="w-5 h-5" />
                 Issue Credential
-              </button>
+              </Link>
             </div>
           </motion.div>
 
@@ -135,6 +157,47 @@ const IssuerDashboard = () => {
                 <div className="text-sm text-muted-foreground">{stat.label}</div>
               </div>
             ))}
+          </motion.div>
+
+          {/* Quick Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mb-8"
+          >
+            <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Link to="/issuer/issue" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Plus className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Issue New</h3>
+                  <p className="text-sm text-muted-foreground">Create credential</p>
+                </div>
+              </Link>
+
+              <Link to="/verify" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FileCheck className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Verify</h3>
+                  <p className="text-sm text-muted-foreground">Check credentials</p>
+                </div>
+              </Link>
+
+              <button className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all text-left">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <TrendingUp className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Analytics</h3>
+                  <p className="text-sm text-muted-foreground">View reports</p>
+                </div>
+              </button>
+            </div>
           </motion.div>
 
           {/* Issue Form Modal */}

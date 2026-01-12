@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
 import { formatAddress } from '@/lib/web3';
 import { 
@@ -12,9 +13,11 @@ import {
   History,
   ExternalLink,
   Loader2,
-  GraduationCap
+  GraduationCap,
+  ArrowRight
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import BackButton from '@/components/BackButton';
 
 const VerifierDashboard = () => {
   const { wallet } = useWallet();
@@ -96,6 +99,8 @@ const VerifierDashboard = () => {
       
       <main className="pt-24 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-7xl">
+          <BackButton to="/role-select" label="Back to Role Selection" />
+
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -111,6 +116,10 @@ const VerifierDashboard = () => {
                   {wallet.address ? formatAddress(wallet.address) : 'Demo Mode'} • Verify academic credentials
                 </p>
               </div>
+              <Link to="/verify" className="btn-primary w-full sm:w-auto">
+                <Shield className="w-5 h-5" />
+                Quick Verify
+              </Link>
             </div>
           </motion.div>
 
@@ -233,13 +242,15 @@ const VerifierDashboard = () => {
               transition={{ delay: 0.3 }}
               className="glass-card p-8"
             >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <History className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold">Recent History</h2>
-                  <p className="text-sm text-muted-foreground">Your verification attempts</p>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <History className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold">Recent History</h2>
+                    <p className="text-sm text-muted-foreground">Your verification attempts</p>
+                  </div>
                 </div>
               </div>
 
