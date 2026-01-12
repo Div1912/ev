@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { WalletProvider } from "@/contexts/WalletContext"
 import { AuthProvider } from "@/contexts/AuthContext"
 import ProtectedRoute from "@/components/ProtectedRoute"
+import AuthGate from "@/components/AuthGate" // ✅ ADD THIS
 
 // Public pages
 import Index from "./pages/Index"
@@ -48,226 +49,230 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <WalletProvider>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
+        {/* ✅ GLOBAL AUTH LOADING GATE */}
+        <AuthGate>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
 
-              {/* --------------------------------------------------
-               * SMART ENTRY POINT
-               * -------------------------------------------------- */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute requireAuth={false}>
-                    <Index />
-                  </ProtectedRoute>
-                }
-              />
+            <BrowserRouter>
+              <Routes>
 
-              {/* --------------------------------------------------
-               * PUBLIC ROUTES
-               * -------------------------------------------------- */}
-              <Route path="/verify" element={<Verify />} />
+                {/* --------------------------------------------------
+                 * SMART ENTRY POINT
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute requireAuth={false}>
+                      <Index />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * AUTH ROUTES
-               * -------------------------------------------------- */}
-              <Route path="/auth/sign-in" element={<SignIn />} />
-              <Route path="/login" element={<Navigate to="/auth/sign-in" replace />} />
+                {/* --------------------------------------------------
+                 * PUBLIC ROUTES
+                 * -------------------------------------------------- */}
+                <Route path="/verify" element={<Verify />} />
 
-              {/* --------------------------------------------------
-               * ONBOARDING ROUTES
-               * -------------------------------------------------- */}
-              <Route
-                path="/onboarding/select-role"
-                element={
-                  <ProtectedRoute>
-                    <SelectRole />
-                  </ProtectedRoute>
-                }
-              />
+                {/* --------------------------------------------------
+                 * AUTH ROUTES
+                 * -------------------------------------------------- */}
+                <Route path="/auth/sign-in" element={<SignIn />} />
+                <Route path="/login" element={<Navigate to="/auth/sign-in" replace />} />
 
-              <Route
-                path="/onboarding/student"
-                element={
-                  <ProtectedRoute>
-                    <StudentOnboarding />
-                  </ProtectedRoute>
-                }
-              />
+                {/* --------------------------------------------------
+                 * ONBOARDING ROUTES
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/onboarding/select-role"
+                  element={
+                    <ProtectedRoute>
+                      <SelectRole />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/onboarding/institution"
-                element={
-                  <ProtectedRoute>
-                    <InstitutionOnboarding />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/onboarding/student"
+                  element={
+                    <ProtectedRoute>
+                      <StudentOnboarding />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/onboarding/verifier"
-                element={
-                  <ProtectedRoute>
-                    <VerifierOnboarding />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/onboarding/institution"
+                  element={
+                    <ProtectedRoute>
+                      <InstitutionOnboarding />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * STUDENT DASHBOARD
-               * -------------------------------------------------- */}
-              <Route
-                path="/dashboard/student"
-                element={
-                  <ProtectedRoute requiredRole="student">
-                    <StudentDashboard />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/onboarding/verifier"
+                  element={
+                    <ProtectedRoute>
+                      <VerifierOnboarding />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/dashboard/student/credentials"
-                element={
-                  <ProtectedRoute requiredRole="student">
-                    <StudentCredentials />
-                  </ProtectedRoute>
-                }
-              />
+                {/* --------------------------------------------------
+                 * STUDENT DASHBOARD
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/dashboard/student"
+                  element={
+                    <ProtectedRoute requiredRole="student">
+                      <StudentDashboard />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/dashboard/student/share/:credentialId"
-                element={
-                  <ProtectedRoute requiredRole="student">
-                    <ShareCredential />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/dashboard/student/credentials"
+                  element={
+                    <ProtectedRoute requiredRole="student">
+                      <StudentCredentials />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/dashboard/student/resume-builder"
-                element={
-                  <ProtectedRoute requiredRole="student">
-                    <ResumeBuilder />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/dashboard/student/share/:credentialId"
+                  element={
+                    <ProtectedRoute requiredRole="student">
+                      <ShareCredential />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * INSTITUTION DASHBOARD
-               * -------------------------------------------------- */}
-              <Route
-                path="/dashboard/institution"
-                element={
-                  <ProtectedRoute requiredRole="issuer">
-                    <InstitutionDashboard />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/dashboard/student/resume-builder"
+                  element={
+                    <ProtectedRoute requiredRole="student">
+                      <ResumeBuilder />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/dashboard/institution/issue"
-                element={
-                  <ProtectedRoute requiredRole="issuer">
-                    <IssueCredential />
-                  </ProtectedRoute>
-                }
-              />
+                {/* --------------------------------------------------
+                 * INSTITUTION DASHBOARD
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/dashboard/institution"
+                  element={
+                    <ProtectedRoute requiredRole="issuer">
+                      <InstitutionDashboard />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * VERIFIER DASHBOARD
-               * -------------------------------------------------- */}
-              <Route
-                path="/dashboard/verifier"
-                element={
-                  <ProtectedRoute requiredRole="verifier">
-                    <VerifierDashboard />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/dashboard/institution/issue"
+                  element={
+                    <ProtectedRoute requiredRole="issuer">
+                      <IssueCredential />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * SETTINGS (ANY AUTHENTICATED + ONBOARDED USER)
-               * -------------------------------------------------- */}
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
+                {/* --------------------------------------------------
+                 * VERIFIER DASHBOARD
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/dashboard/verifier"
+                  element={
+                    <ProtectedRoute requiredRole="verifier">
+                      <VerifierDashboard />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * LEGACY REDIRECTS (SAFE)
-               * -------------------------------------------------- */}
-              <Route path="/student/dashboard" element={<Navigate to="/dashboard/student" replace />} />
-              <Route path="/student/credentials" element={<Navigate to="/dashboard/student/credentials" replace />} />
-              <Route path="/student/resume-builder" element={<Navigate to="/dashboard/student/resume-builder" replace />} />
-              <Route path="/issuer/dashboard" element={<Navigate to="/dashboard/institution" replace />} />
-              <Route path="/issuer/issue" element={<Navigate to="/dashboard/institution/issue" replace />} />
-              <Route path="/verifier/dashboard" element={<Navigate to="/dashboard/verifier" replace />} />
+                {/* --------------------------------------------------
+                 * SETTINGS
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * ADMIN ROUTES
-               * -------------------------------------------------- */}
-              <Route
-                path="/dashboard/admin"
-                element={
-                  <ProtectedRoute requiredRole="admin">
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
+                {/* --------------------------------------------------
+                 * LEGACY REDIRECTS
+                 * -------------------------------------------------- */}
+                <Route path="/student/dashboard" element={<Navigate to="/dashboard/student" replace />} />
+                <Route path="/student/credentials" element={<Navigate to="/dashboard/student/credentials" replace />} />
+                <Route path="/student/resume-builder" element={<Navigate to="/dashboard/student/resume-builder" replace />} />
+                <Route path="/issuer/dashboard" element={<Navigate to="/dashboard/institution" replace />} />
+                <Route path="/issuer/issue" element={<Navigate to="/dashboard/institution/issue" replace />} />
+                <Route path="/verifier/dashboard" element={<Navigate to="/dashboard/verifier" replace />} />
 
-              <Route path="/admin/dashboard" element={<Navigate to="/dashboard/admin" replace />} />
+                {/* --------------------------------------------------
+                 * ADMIN ROUTES
+                 * -------------------------------------------------- */}
+                <Route
+                  path="/dashboard/admin"
+                  element={
+                    <ProtectedRoute requiredRole="admin">
+                      <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/admin/users"
-                element={
-                  <ProtectedRoute requiredRole="admin">
-                    <AdminUsers />
-                  </ProtectedRoute>
-                }
-              />
+                <Route path="/admin/dashboard" element={<Navigate to="/dashboard/admin" replace />} />
 
-              <Route
-                path="/admin/institutions"
-                element={
-                  <ProtectedRoute requiredRole="admin">
-                    <AdminInstitutions />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/admin/users"
+                  element={
+                    <ProtectedRoute requiredRole="admin">
+                      <AdminUsers />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/admin/settings"
-                element={
-                  <ProtectedRoute requiredRole="admin">
-                    <AdminSettings />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/admin/institutions"
+                  element={
+                    <ProtectedRoute requiredRole="admin">
+                      <AdminInstitutions />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/admin/roles"
-                element={
-                  <ProtectedRoute requiredRole="admin">
-                    <RoleManagement />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/admin/settings"
+                  element={
+                    <ProtectedRoute requiredRole="admin">
+                      <AdminSettings />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* --------------------------------------------------
-               * 404
-               * -------------------------------------------------- */}
-              <Route path="*" element={<NotFound />} />
+                <Route
+                  path="/admin/roles"
+                  element={
+                    <ProtectedRoute requiredRole="admin">
+                      <RoleManagement />
+                    </ProtectedRoute>
+                  }
+                />
 
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
+                {/* --------------------------------------------------
+                 * 404
+                 * -------------------------------------------------- */}
+                <Route path="*" element={<NotFound />} />
+
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthGate>
       </AuthProvider>
     </WalletProvider>
   </QueryClientProvider>
