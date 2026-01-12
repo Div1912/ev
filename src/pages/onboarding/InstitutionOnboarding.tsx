@@ -17,7 +17,7 @@ import BackButton from '@/components/BackButton'
  * Rules:
  * - Profile MAY exist before onboarding
  * - Block ONLY if onboarded === true
- * - Must be safe on refresh / retry
+ * - Safe on refresh / retry / tab switch
  */
 const InstitutionOnboarding = () => {
   const navigate = useNavigate()
@@ -42,9 +42,9 @@ const InstitutionOnboarding = () => {
     'Other',
   ]
 
-  /**
-   * 🔍 Load profile once
-   */
+  /* --------------------------------------------------
+   * Load profile ONCE
+   * -------------------------------------------------- */
   useEffect(() => {
     if (!user) return
 
@@ -71,10 +71,12 @@ const InstitutionOnboarding = () => {
     loadProfile()
   }, [user, navigate])
 
+  /* --------------------------------------------------
+   * Submit handler
+   * -------------------------------------------------- */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 🔐 HARD SUBMIT LOCK
     if (isSubmitting) return
 
     if (!user) {
@@ -94,17 +96,13 @@ const InstitutionOnboarding = () => {
     setIsSubmitting(true)
 
     try {
-      /**
-       * 🚫 Block ONLY if already onboarded
-       */
+      // 🚫 Block ONLY if already onboarded
       if (existingProfile?.onboarded === true) {
         navigate('/dashboard/institution', { replace: true })
         return
       }
 
-      /**
-       * 🔁 UPDATE or INSERT (IDEMPOTENT)
-       */
+      // 🔁 UPDATE or INSERT (IDEMPOTENT)
       if (existingProfile) {
         const { error } = await supabase
           .from('profiles')
@@ -113,6 +111,7 @@ const InstitutionOnboarding = () => {
             display_name: formData.displayName,
             institution: formData.institutionName,
             institution_type: formData.institutionType,
+            onboarded: true,
           })
           .eq('user_id', user.id)
 
@@ -127,30 +126,28 @@ const InstitutionOnboarding = () => {
             display_name: formData.displayName,
             institution: formData.institutionName,
             institution_type: formData.institutionType,
-            onboarded: false,
+            onboarded: true,
           })
           .select()
           .single()
 
         if (error) throw error
-
-        // 🔁 sync local state
         setExistingProfile(data)
       }
 
-      /**
-       * ✅ Assign role (safe & idempotent)
-       */
+      // ✅ Assign role (idempotent)
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
           { user_id: user.id, role: 'issuer' },
-          { onConflict: 'user_id,role', ignoreDuplicates: true }
+          { onConflict: 'user_id,role' }
         )
 
       if (roleError) throw roleError
 
-      await refreshProfile()
+      // 🔁 Sync auth context
+      await refreshProfile(user.id)
+
       toast.success('Institution registered successfully!')
       navigate('/dashboard/institution', { replace: true })
     } catch (err) {
@@ -161,6 +158,9 @@ const InstitutionOnboarding = () => {
     }
   }
 
+  /* --------------------------------------------------
+   * UI
+   * -------------------------------------------------- */
   return (
     <div className="min-h-screen flex flex-col">
       <PublicNavbar />
