@@ -40,27 +40,31 @@ const InstitutionOnboarding = () => {
       // Create profile
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
-          wallet_address: wallet.address.toLowerCase(),
-          role: 'issuer',
-          display_name: formData.displayName,
-          institution: formData.institutionName,
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            wallet_address: wallet.address.toLowerCase(),
+            role: 'issuer',
+            display_name: formData.displayName,
+            institution: formData.institutionName,
+          },
+          { onConflict: 'user_id' }
+        );
 
       if (profileError) throw profileError;
 
-      // Add issuer role
+      // Add issuer role (idempotent)
       const { error: roleError } = await supabase
         .from('user_roles')
-        .insert({
-          user_id: user.id,
-          role: 'issuer',
-        });
+        .upsert(
+          {
+            user_id: user.id,
+            role: 'issuer',
+          },
+          { onConflict: 'user_id,role' }
+        );
 
-      if (roleError && !roleError.message.includes('duplicate')) {
-        throw roleError;
-      }
+      if (roleError) throw roleError;
 
       await refreshProfile();
       toast.success('Institution registered successfully!');
@@ -106,7 +110,9 @@ const InstitutionOnboarding = () => {
                 <input
                   type="text"
                   value={formData.institutionName}
-                  onChange={(e) => setFormData({ ...formData, institutionName: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, institutionName: e.target.value })
+                  }
                   placeholder="e.g., Massachusetts Institute of Technology"
                   className="input-glass"
                   required
@@ -119,13 +125,17 @@ const InstitutionOnboarding = () => {
                 </label>
                 <select
                   value={formData.institutionType}
-                  onChange={(e) => setFormData({ ...formData, institutionType: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, institutionType: e.target.value })
+                  }
                   className="input-glass"
                   required
                 >
                   <option value="">Select institution type</option>
                   {institutionTypes.map((type) => (
-                    <option key={type} value={type}>{type}</option>
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -137,7 +147,9 @@ const InstitutionOnboarding = () => {
                 <input
                   type="text"
                   value={formData.displayName}
-                  onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, displayName: e.target.value })
+                  }
                   placeholder="Your full name"
                   className="input-glass"
                   required
@@ -149,7 +161,12 @@ const InstitutionOnboarding = () => {
 
               <button
                 type="submit"
-                disabled={isSubmitting || !formData.institutionName || !formData.institutionType || !formData.displayName}
+                disabled={
+                  isSubmitting ||
+                  !formData.institutionName ||
+                  !formData.institutionType ||
+                  !formData.displayName
+                }
                 className="w-full btn-primary"
               >
                 {isSubmitting ? (
