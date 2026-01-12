@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 
-// Contract ABI for AcademicCredentialNFT
+// Contract ABI for AcademicCredentialNFT (eduverify-2.sol)
 export const CONTRACT_ABI = [
   {
     "inputs": [],
@@ -23,6 +23,14 @@ export const CONTRACT_ABI = [
       { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
     ],
     "name": "OwnershipUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": false, "internalType": "address", "name": "owner", "type": "address" }
+    ],
+    "name": "EmergencyStopActivated",
     "type": "event"
   },
   {
@@ -94,6 +102,13 @@ export const CONTRACT_ABI = [
     "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
     "name": "tokenURI",
     "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "bytes4", "name": "interfaceId", "type": "bytes4" }],
+    "name": "supportsInterface",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
     "type": "function"
   }
@@ -214,6 +229,32 @@ export const mintCertificate = async (
   
   await tx.wait();
   return tx.hash;
+};
+
+export const emergencyStop = async (): Promise<string> => {
+  const contract = await getContract(true);
+  const tx = await contract.emergencyStop();
+  await tx.wait();
+  return tx.hash;
+};
+
+export const resumeContract = async (): Promise<string> => {
+  const contract = await getContract(true);
+  const tx = await contract.resumeContract();
+  await tx.wait();
+  return tx.hash;
+};
+
+export const updateOwner = async (newOwner: string): Promise<string> => {
+  const contract = await getContract(true);
+  const tx = await contract.updateOwner(newOwner);
+  await tx.wait();
+  return tx.hash;
+};
+
+export const getContractOwner = async (): Promise<string> => {
+  const contract = await getContract(false);
+  return await contract.owner();
 };
 
 export const formatAddress = (address: string): string => {

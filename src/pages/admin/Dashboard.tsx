@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
 import { formatAddress } from '@/lib/web3';
 import { 
@@ -11,9 +12,11 @@ import {
   Activity,
   TrendingUp,
   Lock,
-  Unlock
+  Unlock,
+  ArrowRight
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
+import BackButton from '@/components/BackButton';
 
 const AdminDashboard = () => {
   const { wallet } = useWallet();
@@ -45,6 +48,8 @@ const AdminDashboard = () => {
       
       <main className="pt-24 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-7xl">
+          <BackButton to="/role-select" label="Back to Role Selection" />
+
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -61,14 +66,14 @@ const AdminDashboard = () => {
                 </p>
               </div>
               <div className="flex gap-3">
-                <button className="btn-secondary">
+                <Link to="/admin/settings" className="btn-secondary">
                   <Settings className="w-5 h-5" />
                   Settings
-                </button>
-                <button className="btn-primary">
-                  <Shield className="w-5 h-5" />
-                  Security
-                </button>
+                </Link>
+                <Link to="/admin/users" className="btn-primary">
+                  <Users className="w-5 h-5" />
+                  Manage Users
+                </Link>
               </div>
             </div>
           </motion.div>
@@ -94,6 +99,57 @@ const AdminDashboard = () => {
                 <div className="text-sm text-muted-foreground">{stat.label}</div>
               </div>
             ))}
+          </motion.div>
+
+          {/* Quick Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mb-8"
+          >
+            <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Link to="/admin/users" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Users className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Users</h3>
+                  <p className="text-sm text-muted-foreground">Manage all users</p>
+                </div>
+              </Link>
+
+              <Link to="/admin/institutions" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Building2 className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Institutions</h3>
+                  <p className="text-sm text-muted-foreground">Manage institutions</p>
+                </div>
+              </Link>
+
+              <Link to="/admin/settings" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Settings className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Settings</h3>
+                  <p className="text-sm text-muted-foreground">Platform config</p>
+                </div>
+              </Link>
+
+              <Link to="/verify" className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Shield className="w-6 h-6 text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium mb-1">Verify</h3>
+                  <p className="text-sm text-muted-foreground">Check credentials</p>
+                </div>
+              </Link>
+            </div>
           </motion.div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -172,20 +228,20 @@ const AdminDashboard = () => {
               <div className="mt-6 pt-6 border-t border-white/10">
                 <h3 className="text-sm font-medium text-muted-foreground mb-4">Contract Controls</h3>
                 <div className="space-y-3">
-                  <button className="w-full btn-secondary justify-between">
+                  <Link to="/admin/settings" className="w-full btn-secondary justify-between">
                     <span className="flex items-center gap-2">
                       <Lock className="w-4 h-4" />
                       Emergency Stop
                     </span>
-                    <span className="text-xs text-muted-foreground">Pauses all operations</span>
-                  </button>
-                  <button className="w-full btn-secondary justify-between" disabled>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                  <Link to="/admin/settings" className="w-full btn-secondary justify-between">
                     <span className="flex items-center gap-2">
                       <Unlock className="w-4 h-4" />
                       Resume Contract
                     </span>
-                    <span className="text-xs text-muted-foreground">Currently active</span>
-                  </button>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
                 </div>
               </div>
             </motion.div>

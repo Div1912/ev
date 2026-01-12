@@ -5,6 +5,8 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { verifyCertificate, CertificateDetails } from '@/lib/web3';
 
+import BackButton from '@/components/BackButton';
+
 const VerifyPage = () => {
   const [tokenId, setTokenId] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -64,6 +66,7 @@ const VerifyPage = () => {
         
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto">
+            <BackButton label="Back" />
             {/* Header */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
