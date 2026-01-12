@@ -1,112 +1,81 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
-import { formatAddress, mintCertificate } from '@/lib/web3';
+import { useAuth } from '@/contexts/AuthContext';
+import { formatAddress } from '@/lib/web3';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Building2, 
   FileCheck, 
   Users, 
   Clock, 
   Plus,
-  Send,
   Search,
-  ArrowRight,
   CheckCircle,
-  Loader2,
-  FolderOpen,
-  TrendingUp
+  TrendingUp,
+  FileX
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
-import { toast } from 'sonner';
+
+interface IssuedCredential {
+  id: string;
+  token_id: number | null;
+  student_name: string;
+  degree: string;
+  student_wallet: string;
+  issued_at: string;
+  status: string;
+}
 
 const IssuerDashboard = () => {
-  const navigate = useNavigate();
   const { wallet } = useWallet();
-  const [isIssuing, setIsIssuing] = useState(false);
-  const [showIssueForm, setShowIssueForm] = useState(false);
+  const { profile, user } = useAuth();
+  const [issuedCredentials, setIssuedCredentials] = useState<IssuedCredential[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Form state
-  const [formData, setFormData] = useState({
-    recipientAddress: '',
-    studentName: '',
-    degree: '',
-    university: 'Massachusetts Institute of Technology',
-  });
+  useEffect(() => {
+    const fetchCredentials = async () => {
+      if (!profile?.id) {
+        setIsLoading(false);
+        return;
+      }
 
-  // Demo issued credentials
-  const issuedCredentials = [
-    {
-      id: 1,
-      tokenId: 0,
-      studentName: 'Jane Smith',
-      degree: 'Bachelor of Science in Computer Science',
-      recipient: '0x1234...5678',
-      issuedDate: '2024-06-15',
-      status: 'verified',
-    },
-    {
-      id: 2,
-      tokenId: 1,
-      studentName: 'John Doe',
-      degree: 'Master of Business Administration',
-      recipient: '0x8765...4321',
-      issuedDate: '2024-06-10',
-      status: 'verified',
-    },
-    {
-      id: 3,
-      tokenId: 2,
-      studentName: 'Alice Johnson',
-      degree: 'Bachelor of Arts in Economics',
-      recipient: '0x9999...1111',
-      issuedDate: '2024-06-05',
-      status: 'pending',
-    },
-  ];
+      try {
+        const { data, error } = await supabase
+          .from('credentials')
+          .select('*')
+          .eq('issued_by', profile.id)
+          .order('issued_at', { ascending: false });
+
+        if (error) throw error;
+        setIssuedCredentials(data || []);
+      } catch (error) {
+        console.error('Failed to fetch credentials:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCredentials();
+  }, [profile?.id]);
+
+  const verifiedCount = issuedCredentials.filter(c => c.status === 'verified').length;
+  const pendingCount = issuedCredentials.filter(c => c.status === 'pending').length;
+  const uniqueStudents = new Set(issuedCredentials.map(c => c.student_wallet)).size;
 
   const stats = [
     { label: 'Total Issued', value: issuedCredentials.length, icon: FileCheck },
-    { label: 'Active Students', value: 156, icon: Users },
-    { label: 'Pending', value: 1, icon: Clock },
-    { label: 'This Month', value: 12, icon: Building2 },
+    { label: 'Students', value: uniqueStudents, icon: Users },
+    { label: 'Pending', value: pendingCount, icon: Clock },
+    { label: 'Verified', value: verifiedCount, icon: CheckCircle },
   ];
 
-  const handleIssue = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsIssuing(true);
-    
-    try {
-      if (wallet.isConnected) {
-        const certificateURI = 'ipfs://QmExample...';
-        await mintCertificate(
-          formData.recipientAddress,
-          formData.studentName,
-          formData.degree,
-          formData.university,
-          certificateURI
-        );
-        toast.success('Credential issued successfully!');
-      } else {
-        // Demo mode
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        toast.success('Credential issued successfully! (Demo Mode)');
-      }
-      
-      setShowIssueForm(false);
-      setFormData({
-        recipientAddress: '',
-        studentName: '',
-        degree: '',
-        university: 'Massachusetts Institute of Technology',
-      });
-    } catch (error) {
-      console.error('Failed to issue credential:', error);
-      toast.error('Failed to issue credential. Please try again.');
-    } finally {
-      setIsIssuing(false);
-    }
-  };
+  const filteredCredentials = issuedCredentials.filter(c => 
+    c.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.degree.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen">
@@ -123,10 +92,10 @@ const IssuerDashboard = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-                  Institution <span className="gradient-text">Dashboard</span>
+                  <span className="gradient-text">{profile?.institution || 'Institution'}</span> Dashboard
                 </h1>
                 <p className="text-muted-foreground">
-                  {wallet.address ? formatAddress(wallet.address) : 'Demo Mode'} • Issue and manage credentials
+                  {wallet.address ? formatAddress(wallet.address) : ''} • Issue and manage credentials
                 </p>
               </div>
               <Link
@@ -188,177 +157,112 @@ const IssuerDashboard = () => {
                 </div>
               </Link>
 
-              <button className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all text-left">
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="glass-card p-5 flex items-center gap-4 group hover:-translate-y-1 transition-all opacity-50 cursor-not-allowed">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <TrendingUp className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
                   <h3 className="font-medium mb-1">Analytics</h3>
-                  <p className="text-sm text-muted-foreground">View reports</p>
+                  <p className="text-sm text-muted-foreground">Coming soon</p>
                 </div>
-              </button>
+              </div>
             </div>
           </motion.div>
 
-          {/* Issue Form Modal */}
-          {showIssueForm && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-              onClick={(e) => e.target === e.currentTarget && setShowIssueForm(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="glass-card w-full max-w-lg p-8"
-              >
-                <h2 className="text-2xl font-bold mb-6">Issue New Credential</h2>
-                
-                <form onSubmit={handleIssue} className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Recipient Wallet Address</label>
-                    <input
-                      type="text"
-                      value={formData.recipientAddress}
-                      onChange={(e) => setFormData({ ...formData, recipientAddress: e.target.value })}
-                      placeholder="0x..."
-                      className="input-glass"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Student Name</label>
-                    <input
-                      type="text"
-                      value={formData.studentName}
-                      onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
-                      placeholder="Full name"
-                      className="input-glass"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Degree / Credential</label>
-                    <input
-                      type="text"
-                      value={formData.degree}
-                      onChange={(e) => setFormData({ ...formData, degree: e.target.value })}
-                      placeholder="e.g., Bachelor of Science in Computer Science"
-                      className="input-glass"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Institution</label>
-                    <input
-                      type="text"
-                      value={formData.university}
-                      onChange={(e) => setFormData({ ...formData, university: e.target.value })}
-                      className="input-glass"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowIssueForm(false)}
-                      className="flex-1 btn-secondary"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isIssuing}
-                      className="flex-1 btn-primary"
-                    >
-                      {isIssuing ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Issuing...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-5 h-5" />
-                          Issue Credential
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-
-          {/* Recent Issues */}
+          {/* Issued Credentials */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">Recently Issued</h2>
-              <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold">Issued Credentials</h2>
+              {issuedCredentials.length > 0 && (
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="input-glass pl-10 py-2 w-48"
                   />
                 </div>
-              </div>
+              )}
             </div>
 
-            <div className="glass-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Token ID</th>
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Student</th>
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Degree</th>
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Recipient</th>
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Date</th>
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {issuedCredentials.map((credential) => (
-                      <tr 
-                        key={credential.id} 
-                        className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                      >
-                        <td className="p-4 font-mono text-sm">#{credential.tokenId}</td>
-                        <td className="p-4 font-medium">{credential.studentName}</td>
-                        <td className="p-4 text-sm text-muted-foreground max-w-[200px] truncate">
-                          {credential.degree}
-                        </td>
-                        <td className="p-4 font-mono text-sm">{credential.recipient}</td>
-                        <td className="p-4 text-sm text-muted-foreground">{credential.issuedDate}</td>
-                        <td className="p-4">
-                          {credential.status === 'verified' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-medium">
-                              <CheckCircle className="w-3 h-3" />
-                              Verified
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-500/10 text-yellow-400 text-xs font-medium">
-                              <Clock className="w-3 h-3" />
-                              Pending
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {isLoading ? (
+              <div className="glass-card p-12 text-center">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading credentials...</p>
               </div>
-            </div>
+            ) : issuedCredentials.length === 0 ? (
+              <div className="glass-card p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-6">
+                  <FileX className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">No Credentials Issued Yet</h3>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  Start issuing verifiable credentials to your students. Each credential will be minted as an NFT on the blockchain.
+                </p>
+                <Link to="/issuer/issue" className="btn-primary">
+                  <Plus className="w-5 h-5" />
+                  Issue Your First Credential
+                </Link>
+              </div>
+            ) : (
+              <div className="glass-card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">Token ID</th>
+                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">Student</th>
+                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">Degree</th>
+                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">Recipient</th>
+                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">Date</th>
+                        <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCredentials.map((credential) => (
+                        <tr 
+                          key={credential.id} 
+                          className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                        >
+                          <td className="p-4 font-mono text-sm">
+                            {credential.token_id !== null ? `#${credential.token_id}` : '-'}
+                          </td>
+                          <td className="p-4 font-medium">{credential.student_name}</td>
+                          <td className="p-4 text-sm text-muted-foreground max-w-[200px] truncate">
+                            {credential.degree}
+                          </td>
+                          <td className="p-4 font-mono text-sm">
+                            {formatAddress(credential.student_wallet)}
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {new Date(credential.issued_at).toLocaleDateString()}
+                          </td>
+                          <td className="p-4">
+                            {credential.status === 'verified' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-medium">
+                                <CheckCircle className="w-3 h-3" />
+                                Verified
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-yellow-500/10 text-yellow-400 text-xs font-medium">
+                                <Clock className="w-3 h-3" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
       </main>

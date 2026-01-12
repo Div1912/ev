@@ -2,24 +2,37 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { Wallet, ArrowRight, Shield, AlertCircle, GraduationCap, Loader2 } from 'lucide-react';
+import { useAuth, UserRole } from '@/contexts/AuthContext';
+import { Wallet, Shield, AlertCircle, GraduationCap, Loader2 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import BackButton from '@/components/BackButton';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const { wallet, connect, isConnecting, error: walletError, isMetaMaskAvailable } = useWallet();
-  const { user, isAuthenticating, authenticateWallet, error: authError } = useAuth();
+  const { user, profile, roles, isAuthenticating, authenticateWallet, error: authError, isLoading } = useAuth();
   const [showMetaMaskWarning, setShowMetaMaskWarning] = useState(false);
   const [authStep, setAuthStep] = useState<'connect' | 'sign' | 'complete'>('connect');
 
-  // If already authenticated, redirect
+  // Redirect authenticated users to their dashboard
   useEffect(() => {
-    if (user) {
-      navigate('/role-select');
+    if (!isLoading && user) {
+      // If user has profile and roles, go to dashboard
+      if (profile && roles.length > 0) {
+        const primaryRole = roles[0];
+        const dashboardPaths: Record<UserRole, string> = {
+          student: '/student/dashboard',
+          issuer: '/issuer/dashboard',
+          verifier: '/verify',
+          admin: '/admin/dashboard',
+        };
+        navigate(dashboardPaths[primaryRole], { replace: true });
+      } else {
+        // New user - needs role selection
+        navigate('/role-select', { replace: true });
+      }
     }
-  }, [user, navigate]);
+  }, [user, profile, roles, isLoading, navigate]);
 
   const handleConnect = async () => {
     if (!isMetaMaskAvailable) {
@@ -41,7 +54,7 @@ const LoginPage = () => {
     try {
       await authenticateWallet();
       setAuthStep('complete');
-      navigate('/role-select');
+      // Redirect will be handled by useEffect
     } catch (err) {
       setAuthStep('connect');
       console.error('Authentication failed:', err);
@@ -51,6 +64,14 @@ const LoginPage = () => {
   const error = walletError || authError;
   const isProcessing = isConnecting || isAuthenticating;
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -59,7 +80,6 @@ const LoginPage = () => {
         <div className="container mx-auto max-w-md">
           <BackButton to="/" label="Back to Home" />
         </div>
-        {/* Background effects */}
         <div className="hero-glow" />
         <div className="flex-1 flex items-center justify-center">
         <div className="glow-orb w-96 h-96 -top-48 -right-48 opacity-30" />
@@ -70,13 +90,12 @@ const LoginPage = () => {
           className="w-full max-w-md"
         >
           <div className="glass-card p-8 md:p-10">
-            {/* Header */}
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-primary mb-6">
                 <GraduationCap className="w-8 h-8 text-white" />
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-                Welcome to <span className="gradient-text">EduVerify</span>
+                Sign in to <span className="gradient-text">EduVerify</span>
               </h1>
               <p className="text-muted-foreground">
                 {wallet.isConnected 
@@ -86,7 +105,6 @@ const LoginPage = () => {
               </p>
             </div>
 
-            {/* MetaMask Warning */}
             {showMetaMaskWarning && !isMetaMaskAvailable && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -112,7 +130,6 @@ const LoginPage = () => {
               </motion.div>
             )}
 
-            {/* Error */}
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -124,10 +141,8 @@ const LoginPage = () => {
               </motion.div>
             )}
 
-            {/* Auth Steps */}
             {wallet.isConnected ? (
               <>
-                {/* Connected wallet info */}
                 <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/10 border border-primary/30 mb-6">
                   <Wallet className="w-5 h-5 text-primary" />
                   <div className="flex-1 min-w-0">
@@ -136,7 +151,6 @@ const LoginPage = () => {
                   </div>
                 </div>
 
-                {/* Sign Button */}
                 <button
                   onClick={handleAuthenticate}
                   disabled={isAuthenticating}
@@ -160,7 +174,6 @@ const LoginPage = () => {
                 </p>
               </>
             ) : (
-              /* Connect Button */
               <button
                 onClick={handleConnect}
                 disabled={isConnecting}
@@ -180,27 +193,6 @@ const LoginPage = () => {
               </button>
             )}
 
-            {/* Alternative options */}
-            <div className="relative mb-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-card px-4 text-sm text-muted-foreground">or continue with</span>
-              </div>
-            </div>
-
-            {/* Demo Mode */}
-            <button
-              onClick={() => navigate('/role-select')}
-              className="w-full btn-secondary mb-6"
-            >
-              <Shield className="w-5 h-5" />
-              Demo Mode (Read Only)
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            {/* Info */}
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
