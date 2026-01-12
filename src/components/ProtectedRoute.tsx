@@ -6,7 +6,6 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: UserRole;
   requireAuth?: boolean;
-  allowDemo?: boolean;
 }
 
 /**
@@ -15,15 +14,13 @@ interface ProtectedRouteProps {
  * @param children - The component to render if access is granted
  * @param requiredRole - The role required to access this route (optional)
  * @param requireAuth - Whether authentication is required (default: true)
- * @param allowDemo - Whether to allow demo/unauthenticated access with limited functionality (default: false)
  */
 export const ProtectedRoute = ({ 
   children, 
   requiredRole, 
   requireAuth = true,
-  allowDemo = false,
 }: ProtectedRouteProps) => {
-  const { user, hasRole, isLoading, roles } = useAuth();
+  const { user, hasRole, isLoading, roles, profile } = useAuth();
   const location = useLocation();
 
   // Show loading state while checking auth
@@ -40,10 +37,6 @@ export const ProtectedRoute = ({
   
   // If auth is required and user is not authenticated
   if (requireAuth && !user) {
-    // Allow demo mode if enabled
-    if (allowDemo) {
-      return <>{children}</>;
-    }
     // Redirect to login, preserving the intended destination
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
@@ -51,17 +44,22 @@ export const ProtectedRoute = ({
   // If a specific role is required
   if (requiredRole && user) {
     // Check if user has the required role
-    // New users with no roles default to student access
-    const hasAccess = hasRole(requiredRole) || 
-      (roles.length === 0 && requiredRole === 'student');
-    
-    if (!hasAccess) {
-      // User doesn't have the required role - redirect to role select with message
-      return <Navigate to="/role-select" state={{ 
-        unauthorized: true, 
-        requiredRole,
-        from: location 
-      }} replace />;
+    if (!hasRole(requiredRole)) {
+      // User doesn't have the required role
+      // If user has no profile yet, they need to complete onboarding
+      if (!profile || roles.length === 0) {
+        return <Navigate to="/role-select" state={{ from: location }} replace />;
+      }
+      
+      // User has a profile but wrong role - redirect to their actual dashboard
+      const primaryRole = roles[0];
+      const dashboardPaths: Record<UserRole, string> = {
+        student: '/student/dashboard',
+        issuer: '/issuer/dashboard',
+        verifier: '/verify',
+        admin: '/admin/dashboard',
+      };
+      return <Navigate to={dashboardPaths[primaryRole]} replace />;
     }
   }
   

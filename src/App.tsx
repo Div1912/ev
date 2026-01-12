@@ -10,6 +10,9 @@ import Index from "./pages/Index";
 import Verify from "./pages/Verify";
 import Login from "./pages/Login";
 import RoleSelect from "./pages/RoleSelect";
+import StudentOnboarding from "./pages/onboarding/StudentOnboarding";
+import InstitutionOnboarding from "./pages/onboarding/InstitutionOnboarding";
+import VerifierOnboarding from "./pages/onboarding/VerifierOnboarding";
 import StudentDashboard from "./pages/student/Dashboard";
 import StudentCredentials from "./pages/student/Credentials";
 import ResumeBuilder from "./pages/student/ResumeBuilder";
@@ -38,22 +41,51 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/role-select" element={<RoleSelect />} />
-              <Route path="/dashboard" element={<RoleSelect />} />
               
-              {/* Student routes - require student role or allow demo */}
+              {/* Role selection - for first-time users */}
+              <Route path="/role-select" element={
+                <ProtectedRoute requireAuth>
+                  <RoleSelect />
+                </ProtectedRoute>
+              } />
+              
+              {/* Onboarding routes - for first-time users after role selection */}
+              <Route path="/onboarding/student" element={
+                <ProtectedRoute requireAuth>
+                  <StudentOnboarding />
+                </ProtectedRoute>
+              } />
+              <Route path="/onboarding/institution" element={
+                <ProtectedRoute requireAuth>
+                  <InstitutionOnboarding />
+                </ProtectedRoute>
+              } />
+              <Route path="/onboarding/verifier" element={
+                <ProtectedRoute requireAuth>
+                  <VerifierOnboarding />
+                </ProtectedRoute>
+              } />
+              
+              {/* Dashboard redirect */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute requireAuth>
+                  <RoleSelect />
+                </ProtectedRoute>
+              } />
+              
+              {/* Student routes - require student role */}
               <Route path="/student/dashboard" element={
-                <ProtectedRoute requiredRole="student" allowDemo>
+                <ProtectedRoute requiredRole="student">
                   <StudentDashboard />
                 </ProtectedRoute>
               } />
               <Route path="/student/credentials" element={
-                <ProtectedRoute requiredRole="student" allowDemo>
+                <ProtectedRoute requiredRole="student">
                   <StudentCredentials />
                 </ProtectedRoute>
               } />
               <Route path="/student/resume-builder" element={
-                <ProtectedRoute requiredRole="student" allowDemo>
+                <ProtectedRoute requiredRole="student">
                   <ResumeBuilder />
                 </ProtectedRoute>
               } />

@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWallet } from '@/contexts/WalletContext';
+import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { formatAddress, formatBalance } from '@/lib/web3';
-import { Menu, X, Wallet, ChevronDown, LogOut, Shield, GraduationCap } from 'lucide-react';
+import { Menu, X, Wallet, ChevronDown, LogOut, User, GraduationCap } from 'lucide-react';
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isWalletDropdownOpen, setIsWalletDropdownOpen] = useState(false);
   const { wallet, isConnecting, connect, disconnect, isMetaMaskAvailable } = useWallet();
+  const { user, profile, roles, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -33,9 +35,28 @@ const Navbar = () => {
     setIsMobileMenuOpen(false);
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    setIsWalletDropdownOpen(false);
+    setIsMobileMenuOpen(false);
+    navigate('/');
+  };
+
+  const getDashboardPath = (): string => {
+    if (!roles.length) return '/role-select';
+    const primaryRole = roles[0];
+    const paths: Record<UserRole, string> = {
+      student: '/student/dashboard',
+      issuer: '/issuer/dashboard',
+      verifier: '/verify',
+      admin: '/admin/dashboard',
+    };
+    return paths[primaryRole];
+  };
+
   const handleLaunchApp = () => {
-    if (wallet.isConnected) {
-      navigate('/dashboard');
+    if (user && profile) {
+      navigate(getDashboardPath());
     } else {
       navigate('/login');
     }
@@ -83,14 +104,16 @@ const Navbar = () => {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
-            {wallet.isConnected ? (
+            {user && wallet.isConnected ? (
               <div className="relative">
                 <button
                   onClick={() => setIsWalletDropdownOpen(!isWalletDropdownOpen)}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all"
                 >
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-sm font-medium">{formatAddress(wallet.address!)}</span>
+                  <span className="text-sm font-medium">
+                    {profile?.display_name || formatAddress(wallet.address!)}
+                  </span>
                   <ChevronDown className="w-4 h-4" />
                 </button>
 
@@ -100,35 +123,34 @@ const Navbar = () => {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
-                      className="absolute right-0 mt-2 w-64 glass-card p-4"
+                      className="absolute right-0 mt-2 w-64 glass-card p-4 z-50"
                     >
                       <div className="space-y-3">
-                        <div className="text-sm text-muted-foreground">Connected</div>
-                        <div className="font-mono text-sm break-all">{wallet.address}</div>
+                        <div className="text-sm text-muted-foreground">Signed in as</div>
+                        <div className="font-medium">{profile?.display_name || 'User'}</div>
+                        <div className="font-mono text-xs text-muted-foreground break-all">{wallet.address}</div>
                         {wallet.balance && (
                           <div className="text-sm text-muted-foreground">
                             Balance: {formatBalance(wallet.balance)} ETH
                           </div>
                         )}
-                        <div className="pt-2 border-t border-white/10 flex gap-2">
+                        <div className="pt-2 border-t border-white/10 space-y-2">
                           <button
                             onClick={() => {
-                              navigate('/dashboard');
+                              navigate(getDashboardPath());
                               setIsWalletDropdownOpen(false);
                             }}
-                            className="flex-1 btn-secondary text-sm py-2"
+                            className="w-full btn-secondary text-sm py-2"
                           >
-                            <Shield className="w-4 h-4" />
+                            <User className="w-4 h-4" />
                             Dashboard
                           </button>
                           <button
-                            onClick={() => {
-                              disconnect();
-                              setIsWalletDropdownOpen(false);
-                            }}
-                            className="flex items-center justify-center px-3 py-2 rounded-xl border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors"
+                            onClick={handleSignOut}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors text-sm"
                           >
                             <LogOut className="w-4 h-4" />
+                            Sign Out
                           </button>
                         </div>
                       </div>
@@ -139,25 +161,27 @@ const Navbar = () => {
             ) : (
               <>
                 <button onClick={handleLaunchApp} className="btn-secondary">
-                  Launch App
+                  {user ? 'Dashboard' : 'Sign In'}
                 </button>
-                <button
-                  onClick={connect}
-                  disabled={isConnecting || !isMetaMaskAvailable}
-                  className="btn-primary"
-                >
-                  {isConnecting ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Connecting...
-                    </span>
-                  ) : (
-                    <>
-                      <Wallet className="w-4 h-4" />
-                      Connect Wallet
-                    </>
-                  )}
-                </button>
+                {!wallet.isConnected && (
+                  <button
+                    onClick={connect}
+                    disabled={isConnecting || !isMetaMaskAvailable}
+                    className="btn-primary"
+                  >
+                    {isConnecting ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Connecting...
+                      </span>
+                    ) : (
+                      <>
+                        <Wallet className="w-4 h-4" />
+                        Connect Wallet
+                      </>
+                    )}
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -203,31 +227,42 @@ const Navbar = () => {
                 )
               ))}
               <div className="pt-4 border-t border-white/10 space-y-3">
-                {wallet.isConnected ? (
+                {user && wallet.isConnected ? (
                   <>
                     <div className="flex items-center gap-2 py-2">
                       <div className="w-2 h-2 rounded-full bg-green-400" />
-                      <span className="text-sm font-medium">{formatAddress(wallet.address!)}</span>
+                      <span className="text-sm font-medium">
+                        {profile?.display_name || formatAddress(wallet.address!)}
+                      </span>
                     </div>
-                    <button onClick={() => navigate('/dashboard')} className="w-full btn-secondary">
+                    <button 
+                      onClick={() => {
+                        navigate(getDashboardPath());
+                        setIsMobileMenuOpen(false);
+                      }} 
+                      className="w-full btn-secondary"
+                    >
                       Dashboard
                     </button>
-                    <button onClick={disconnect} className="w-full btn-secondary text-destructive border-destructive/50">
-                      Disconnect
+                    <button onClick={handleSignOut} className="w-full btn-secondary text-destructive border-destructive/50">
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
                     </button>
                   </>
                 ) : (
                   <>
                     <button onClick={handleLaunchApp} className="w-full btn-secondary">
-                      Launch App
+                      Sign In
                     </button>
-                    <button
-                      onClick={connect}
-                      disabled={isConnecting || !isMetaMaskAvailable}
-                      className="w-full btn-primary"
-                    >
-                      {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-                    </button>
+                    {!wallet.isConnected && (
+                      <button
+                        onClick={connect}
+                        disabled={isConnecting || !isMetaMaskAvailable}
+                        className="w-full btn-primary"
+                      >
+                        {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                      </button>
+                    )}
                   </>
                 )}
               </div>

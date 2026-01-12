@@ -1,16 +1,30 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
-import { ArrowRight, Shield, CheckCircle, Zap, Wallet } from 'lucide-react';
+import { useAuth, UserRole } from '@/contexts/AuthContext';
+import { ArrowRight, Shield, CheckCircle, Zap } from 'lucide-react';
 
 const HeroSection = () => {
   const navigate = useNavigate();
-  const { wallet, connect, isConnecting, isMetaMaskAvailable } = useWallet();
+  const { wallet } = useWallet();
+  const { user, profile, roles } = useAuth();
 
   const handleLaunchApp = () => {
-    if (wallet.isConnected) {
-      navigate('/dashboard');
+    if (user && profile && roles.length > 0) {
+      // Authenticated user with profile - go to their dashboard
+      const primaryRole = roles[0];
+      const paths: Record<UserRole, string> = {
+        student: '/student/dashboard',
+        issuer: '/issuer/dashboard',
+        verifier: '/verify',
+        admin: '/admin/dashboard',
+      };
+      navigate(paths[primaryRole]);
+    } else if (user) {
+      // Authenticated but no profile - go to role selection
+      navigate('/role-select');
     } else {
+      // Not authenticated - go to login
       navigate('/login');
     }
   };
@@ -85,28 +99,15 @@ const HeroSection = () => {
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
           >
             <button onClick={handleLaunchApp} className="btn-primary group w-full sm:w-auto">
-              Launch App
+              {user && profile ? 'Go to Dashboard' : 'Get Started'}
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
-            {!wallet.isConnected && (
-              <button
-                onClick={connect}
-                disabled={isConnecting || !isMetaMaskAvailable}
-                className="btn-secondary w-full sm:w-auto"
-              >
-                {isConnecting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Connecting...
-                  </span>
-                ) : (
-                  <>
-                    <Wallet className="w-4 h-4" />
-                    Connect Wallet
-                  </>
-                )}
-              </button>
-            )}
+            <button
+              onClick={() => navigate('/verify')}
+              className="btn-secondary w-full sm:w-auto"
+            >
+              Verify a Credential
+            </button>
           </motion.div>
 
           {/* Trust indicators */}
