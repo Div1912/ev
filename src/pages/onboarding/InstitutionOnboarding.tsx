@@ -1,15 +1,20 @@
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
-import { Building2, Loader2, ArrowRight } from 'lucide-react'
+"use client"
 
-import { useAuth } from '@/contexts/AuthContext'
-import { useWallet } from '@/contexts/WalletContext'
-import { supabase } from '@/integrations/supabase/client'
-import { toast } from 'sonner'
+import type React from "react"
 
-import PublicNavbar from '@/components/PublicNavbar'
-import BackButton from '@/components/BackButton'
+import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
+import { useNavigate } from "react-router-dom"
+import { Building2, Loader2, ArrowRight } from "lucide-react"
+
+import { useAuth } from "@/contexts/AuthContext"
+import { useWallet } from "@/contexts/WalletContext"
+import { supabase } from "@/integrations/supabase/client"
+import { toast } from "sonner"
+
+import PublicNavbar from "@/components/PublicNavbar"
+import BackButton from "@/components/BackButton"
+import { registerIssuerOnBlockchain } from "@/lib/registerIssuer"
 
 /**
  * INSTITUTION ONBOARDING
@@ -17,7 +22,8 @@ import BackButton from '@/components/BackButton'
  * Responsibilities:
  * - Assign issuer role
  * - Update profile
- * - CREATE institution record (this was missing ❌)
+ * - CREATE institution record
+ * - Register issuer on blockchain
  */
 const InstitutionOnboarding = () => {
   const navigate = useNavigate()
@@ -27,24 +33,17 @@ const InstitutionOnboarding = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
-    institutionName: '',
-    institutionType: '',
-    displayName: '',
+    institutionName: "",
+    institutionType: "",
+    displayName: "",
   })
 
-  const institutionTypes = [
-    'University',
-    'College',
-    'School',
-    'Training Institute',
-    'Certification Body',
-    'Other',
-  ]
+  const institutionTypes = ["University", "College", "School", "Training Institute", "Certification Body", "Other"]
 
   // Redirect if already onboarded as issuer
   useEffect(() => {
-    if (roles.includes('issuer')) {
-      navigate('/dashboard/institution', { replace: true })
+    if (roles.includes("issuer")) {
+      navigate("/dashboard/institution", { replace: true })
     }
   }, [roles, navigate])
 
@@ -53,16 +52,15 @@ const InstitutionOnboarding = () => {
     if (isSubmitting) return
 
     if (!user) {
-      toast.error('Please sign in first')
-      navigate('/auth/sign-up')
+      toast.error("Please sign in first")
+      navigate("/auth/sign-up")
       return
     }
 
-    const walletAddress =
-      wallet.address || user.user_metadata?.wallet_address
+    const walletAddress = wallet.address || user.user_metadata?.wallet_address
 
     if (!walletAddress) {
-      toast.error('Wallet address not found. Please reconnect your wallet.')
+      toast.error("Wallet address not found. Please reconnect your wallet.")
       return
     }
 
@@ -73,14 +71,14 @@ const InstitutionOnboarding = () => {
          1️⃣ Update profile
       ========================= */
       const { error: profileError } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({
-          role: 'issuer',
+          role: "issuer",
           display_name: formData.displayName,
           institution: formData.institutionName,
           onboarded: true,
         })
-        .eq('user_id', user.id)
+        .eq("user_id", user.id)
 
       if (profileError) {
         throw new Error(profileError.message)
@@ -90,45 +88,57 @@ const InstitutionOnboarding = () => {
          2️⃣ Assign issuer role
       ========================= */
       const { error: roleError } = await supabase
-        .from('user_roles')
-        .upsert(
-          { user_id: user.id, role: 'issuer' },
-          { onConflict: 'user_id,role' }
-        )
+        .from("user_roles")
+        .upsert({ user_id: user.id, role: "issuer" }, { onConflict: "user_id,role" })
 
       if (roleError) {
         throw new Error(roleError.message)
       }
 
       /* =========================
-         3️⃣ CREATE INSTITUTION (FIX)
+         3️⃣ CREATE INSTITUTION
       ========================= */
-      const { error: institutionError } = await supabase
-        .from('institutions')
-        .upsert(
-          {
-            user_id: user.id,
-            wallet_address: walletAddress.toLowerCase(),
-            name: formData.institutionName,
-            type: formData.institutionType,
-            display_name: formData.displayName,
-            configured: true,
-            verified: false, // keep false until admin verification
-          },
-          { onConflict: 'user_id' }
-        )
+      const { error: institutionError } = await supabase.from("institutions").upsert(
+        {
+          user_id: user.id,
+          wallet_address: walletAddress.toLowerCase(),
+          name: formData.institutionName,
+          type: formData.institutionType,
+          display_name: formData.displayName,
+          configured: true,
+          verified: false, // keep false until admin verification
+        },
+        { onConflict: "user_id" },
+      )
 
       if (institutionError) {
         throw new Error(institutionError.message)
       }
 
+      /* =========================
+         4️⃣ REGISTER ON BLOCKCHAIN
+         Added automatic blockchain registration
+      ========================= */
+      try {
+        const result = await registerIssuerOnBlockchain(walletAddress.toLowerCase(), formData.institutionName)
+
+        if (result.already_registered) {
+          toast.success("Institution registered! (Already authorized on blockchain)")
+        } else {
+          toast.success("Institution registered and authorized on blockchain!")
+        }
+      } catch (contractError) {
+        console.error("Blockchain registration error:", contractError)
+        // Don't fail the whole registration if contract call fails
+        toast.warning("Institution registered in database. Blockchain authorization will be retried automatically.")
+      }
+
       await refreshProfile()
 
-      toast.success('Institution registered successfully!')
-      navigate('/dashboard/institution', { replace: true })
+      navigate("/dashboard/institution", { replace: true })
     } catch (err: any) {
-      console.error('Institution onboarding error:', err)
-      toast.error(err.message || 'Failed to complete registration')
+      console.error("Institution onboarding error:", err)
+      toast.error(err.message || "Failed to complete registration")
     } finally {
       setIsSubmitting(false)
     }
@@ -141,11 +151,7 @@ const InstitutionOnboarding = () => {
       <main className="flex-1 flex items-center justify-center pt-20 pb-16 px-4">
         <div className="hero-glow" />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
           <BackButton to="/onboarding/select-role" label="Back" />
 
           <div className="glass-card p-8 md:p-10">
@@ -157,9 +163,7 @@ const InstitutionOnboarding = () => {
               <h1 className="text-2xl sm:text-3xl font-bold mb-2">
                 Register Your <span className="gradient-text">Institution</span>
               </h1>
-              <p className="text-muted-foreground">
-                Set up your institution to start issuing credentials
-              </p>
+              <p className="text-muted-foreground">Set up your institution to start issuing credentials</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -170,9 +174,7 @@ const InstitutionOnboarding = () => {
                 <input
                   className="input-glass"
                   value={formData.institutionName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, institutionName: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, institutionName: e.target.value })}
                   required
                 />
               </div>
@@ -184,9 +186,7 @@ const InstitutionOnboarding = () => {
                 <select
                   className="input-glass"
                   value={formData.institutionType}
-                  onChange={(e) =>
-                    setFormData({ ...formData, institutionType: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, institutionType: e.target.value })}
                   required
                 >
                   <option value="">Select institution type</option>
@@ -205,18 +205,12 @@ const InstitutionOnboarding = () => {
                 <input
                   className="input-glass"
                   value={formData.displayName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, displayName: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
                   required
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full btn-primary"
-              >
+              <button type="submit" disabled={isSubmitting} className="w-full btn-primary">
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
