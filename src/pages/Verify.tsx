@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
-import { Search, CheckCircle, XCircle, Loader2, ExternalLink, Shield, GraduationCap, Calendar, Building } from 'lucide-react';
+import { Search, CheckCircle, XCircle, Loader2, ExternalLink, Shield, GraduationCap, Calendar, Building, Camera, QrCode } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { verifyCertificate, CertificateDetails, isContractConfigured, FLOW_EVM_TESTNET } from '@/lib/web3';
 import { getSafeIPFSUrl, cleanIPFSHash } from '@/lib/ipfsUtils';
 import { supabase } from '@/integrations/supabase/client';
 import BackButton from '@/components/BackButton';
+import QRScanner from '@/components/QRScanner';
 
 interface DatabaseCredential {
   id: string;
@@ -29,6 +30,7 @@ const VerifyPage = () => {
   const [dbCredential, setDbCredential] = useState<DatabaseCredential | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [verificationSource, setVerificationSource] = useState<'blockchain' | 'database' | 'demo'>('demo');
+  const [showScanner, setShowScanner] = useState(false);
 
   // Auto-verify if tokenId is in URL
   useEffect(() => {
@@ -38,6 +40,12 @@ const VerifyPage = () => {
       handleVerify(undefined, urlTokenId);
     }
   }, [searchParams]);
+
+  const handleQRScan = (scannedTokenId: string) => {
+    setShowScanner(false);
+    setTokenId(scannedTokenId);
+    handleVerify(undefined, scannedTokenId);
+  };
 
   const handleVerify = async (e?: React.FormEvent, overrideTokenId?: string) => {
     if (e) e.preventDefault();
@@ -170,29 +178,51 @@ const VerifyPage = () => {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={isVerifying || !tokenId.trim()}
-                  className="w-full btn-primary"
-                >
-                  {isVerifying ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="w-5 h-5" />
-                      Verify Certificate
-                    </>
-                  )}
-                </button>
+                
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={isVerifying || !tokenId.trim()}
+                    className="flex-1 btn-primary"
+                  >
+                    {isVerifying ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-5 h-5" />
+                        Verify Certificate
+                      </>
+                    )}
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowScanner(true)}
+                    className="btn-secondary px-4"
+                    title="Scan QR Code"
+                  >
+                    <Camera className="w-5 h-5" />
+                    <span className="hidden sm:inline">Scan QR</span>
+                  </button>
+                </div>
               </form>
 
-              <p className="text-sm text-muted-foreground text-center mt-4">
-                Credentials are verified on Flow EVM Testnet and stored permanently on IPFS
-              </p>
+              <div className="flex items-center justify-center gap-2 mt-4 text-sm text-muted-foreground">
+                <QrCode className="w-4 h-4" />
+                <span>Scan a student's QR code or enter Token ID manually</span>
+              </div>
             </motion.div>
+            
+            {/* QR Scanner Modal */}
+            {showScanner && (
+              <QRScanner
+                onScan={handleQRScan}
+                onClose={() => setShowScanner(false)}
+              />
+            )}
 
             {/* Result */}
             {result && (
