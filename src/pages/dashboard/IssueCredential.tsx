@@ -121,8 +121,8 @@ useEffect(() => {
       return;
     }
 
-    if (!user || !profile) {
-      toast.error('Please sign in first');
+    if (!user) {
+      toast.error('Session Expired.Please sign in again');
       return;
     }
 if (!institutionConfigured || !issuingInstitution) {
