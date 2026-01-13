@@ -1,157 +1,216 @@
-import { ethers } from 'ethers';
+import { ethers } from "ethers"
 
 // Contract ABI for AcademicCredentialNFT (eduverify-2.sol)
 export const CONTRACT_ABI = [
   {
-    "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    inputs: [],
+    stateMutability: "nonpayable",
+    type: "constructor",
   },
   {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" },
-      { "indexed": false, "internalType": "uint256", "name": "tokenId", "type": "uint256" }
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "recipient", type: "address" },
+      { indexed: false, internalType: "uint256", name: "tokenId", type: "uint256" },
+      { indexed: false, internalType: "string", name: "institutionId", type: "string" },
     ],
-    "name": "CertificateMinted",
-    "type": "event"
+    name: "CertificateMinted",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "address", "name": "previousOwner", "type": "address" },
-      { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "issuer", type: "address" },
+      { indexed: false, internalType: "string", name: "institutionId", type: "string" },
     ],
-    "name": "OwnershipUpdated",
-    "type": "event"
+    name: "IssuerAdded",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": false, "internalType": "address", "name": "owner", "type": "address" }
+    anonymous: false,
+    inputs: [{ indexed: true, internalType: "address", name: "issuer", type: "address" }],
+    name: "IssuerRemoved",
+    type: "event",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "previousOwner", type: "address" },
+      { indexed: true, internalType: "address", name: "newOwner", type: "address" },
     ],
-    "name": "EmergencyStopActivated",
-    "type": "event"
+    name: "OwnershipUpdated",
+    type: "event",
   },
   {
-    "inputs": [
-      { "internalType": "address", "name": "recipient", "type": "address" },
-      { "internalType": "string", "name": "studentName", "type": "string" },
-      { "internalType": "string", "name": "degree", "type": "string" },
-      { "internalType": "string", "name": "university", "type": "string" },
-      { "internalType": "string", "name": "certificateURI", "type": "string" }
+    anonymous: false,
+    inputs: [{ indexed: false, internalType: "address", name: "owner", type: "address" }],
+    name: "EmergencyStopActivated",
+    type: "event",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "issuerAddress", type: "address" },
+      { internalType: "string", name: "institutionId", type: "string" },
     ],
-    "name": "mintCertificate",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    name: "addIssuer",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
-    "name": "getCertificateDetails",
-    "outputs": [
-      { "internalType": "string", "name": "studentName", "type": "string" },
-      { "internalType": "string", "name": "degree", "type": "string" },
-      { "internalType": "string", "name": "university", "type": "string" },
-      { "internalType": "string", "name": "ipfsHash", "type": "string" }
+    inputs: [{ internalType: "address", name: "issuerAddress", type: "address" }],
+    name: "removeIssuer",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "recipient", type: "address" },
+      { internalType: "string", name: "studentName", type: "string" },
+      { internalType: "string", name: "degree", type: "string" },
+      { internalType: "string", name: "university", type: "string" },
+      { internalType: "string", name: "certificateURI", type: "string" },
+      { internalType: "string", name: "institutionId", type: "string" },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    name: "mintCertificate",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
-    "name": "verifyCertificate",
-    "outputs": [
-      { "internalType": "string", "name": "studentName", "type": "string" },
-      { "internalType": "string", "name": "degree", "type": "string" },
-      { "internalType": "string", "name": "university", "type": "string" },
-      { "internalType": "string", "name": "ipfsHash", "type": "string" }
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "getCertificateDetails",
+    outputs: [
+      { internalType: "string", name: "studentName", type: "string" },
+      { internalType: "string", name: "degree", type: "string" },
+      { internalType: "string", name: "university", type: "string" },
+      { internalType: "string", name: "ipfsHash", type: "string" },
+      { internalType: "string", name: "institutionId", type: "string" },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "emergencyStop",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "verifyCertificate",
+    outputs: [
+      { internalType: "string", name: "studentName", type: "string" },
+      { internalType: "string", name: "degree", type: "string" },
+      { internalType: "string", name: "university", type: "string" },
+      { internalType: "string", name: "ipfsHash", type: "string" },
+      { internalType: "string", name: "institutionId", type: "string" },
+    ],
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "resumeContract",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    inputs: [{ internalType: "address", name: "issuerAddress", type: "address" }],
+    name: "getIssuerInfo",
+    outputs: [
+      {
+        components: [
+          { internalType: "address", name: "issuerAddress", type: "address" },
+          { internalType: "string", name: "institutionId", type: "string" },
+          { internalType: "bool", name: "authorized", type: "bool" },
+        ],
+        internalType: "struct AcademicCredentialNFT.Issuer",
+        name: "",
+        type: "tuple",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [{ "internalType": "address", "name": "newOwner", "type": "address" }],
-    "name": "updateOwner",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    inputs: [{ internalType: "address", name: "issuerAddress", type: "address" }],
+    name: "isAuthorizedIssuer",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-    "stateMutability": "view",
-    "type": "function"
+    inputs: [],
+    name: "emergencyStop",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }],
-    "name": "tokenURI",
-    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
-    "stateMutability": "view",
-    "type": "function"
+    inputs: [],
+    name: "resumeContract",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [{ "internalType": "bytes4", "name": "interfaceId", "type": "bytes4" }],
-    "name": "supportsInterface",
-    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-    "stateMutability": "view",
-    "type": "function"
-  }
-];
+    inputs: [{ internalType: "address", name: "newOwner", type: "address" }],
+    name: "updateOwner",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "owner",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "tokenURI",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "bytes4", name: "interfaceId", type: "bytes4" }],
+    name: "supportsInterface",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+]
 
 // Contract address on Flow EVM Testnet
-export const CONTRACT_ADDRESS = "0xA9f203c5C143630B1284Bd7CeB32faba0D3a7413";
+export const CONTRACT_ADDRESS = "0x0243fc35Ace74639Bf847FE69B804DD03057E4Ba"
 
 // Flow EVM Testnet chain configuration
 export const FLOW_EVM_TESTNET = {
   chainId: 545,
-  chainIdHex: '0x221',
-  chainName: 'Flow EVM Testnet',
-  rpcUrls: ['https://testnet.evm.nodes.onflow.org'],
+  chainIdHex: "0x221",
+  chainName: "Flow EVM Testnet",
+  rpcUrls: ["https://testnet.evm.nodes.onflow.org"],
   nativeCurrency: {
-    name: 'FLOW',
-    symbol: 'FLOW',
+    name: "FLOW",
+    symbol: "FLOW",
     decimals: 18,
   },
-  blockExplorerUrls: ['https://evm-testnet.flowscan.io'],
-};
+  blockExplorerUrls: ["https://evm-testnet.flowscan.io"],
+}
 
 // Check if contract is properly configured
 export const isContractConfigured = (): boolean => {
-  return CONTRACT_ADDRESS.length === 42 && CONTRACT_ADDRESS.startsWith('0x');
-};
+  return CONTRACT_ADDRESS.length === 42 && CONTRACT_ADDRESS.startsWith("0x")
+}
 
 // Switch to Flow EVM Testnet
 export const switchToFlowTestnet = async (): Promise<void> => {
   if (!window.ethereum) {
-    throw new Error('No ethereum provider found');
+    throw new Error("No ethereum provider found")
   }
 
   try {
     await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
+      method: "wallet_switchEthereumChain",
       params: [{ chainId: FLOW_EVM_TESTNET.chainIdHex }],
-    });
+    })
   } catch (error: any) {
     // Chain not added, add it
     if (error.code === 4902) {
       await window.ethereum.request({
-        method: 'wallet_addEthereumChain',
+        method: "wallet_addEthereumChain",
         params: [
           {
             chainId: FLOW_EVM_TESTNET.chainIdHex,
@@ -161,70 +220,71 @@ export const switchToFlowTestnet = async (): Promise<void> => {
             blockExplorerUrls: FLOW_EVM_TESTNET.blockExplorerUrls,
           },
         ],
-      });
+      })
     } else {
-      throw error;
+      throw error
     }
   }
-};
+}
 
 export interface WalletState {
-  address: string | null;
-  isConnected: boolean;
-  chainId: number | null;
-  balance: string | null;
+  address: string | null
+  isConnected: boolean
+  chainId: number | null
+  balance: string | null
 }
 
 export interface CertificateDetails {
-  studentName: string;
-  degree: string;
-  university: string;
-  ipfsHash: string;
+  studentName: string
+  degree: string
+  university: string
+  ipfsHash: string
+  institutionId: string
 }
 
 declare global {
   interface Window {
     ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      on: (event: string, callback: (...args: unknown[]) => void) => void;
-      removeListener: (event: string, callback: (...args: unknown[]) => void) => void;
-      isMetaMask?: boolean;
-    };
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+      on: (event: string, callback: (...args: unknown[]) => void) => void
+      removeListener: (event: string, callback: (...args: unknown[]) => void) => void
+      isMetaMask?: boolean
+    }
   }
 }
 
 export const isMetaMaskInstalled = (): boolean => {
-  return typeof window !== 'undefined' && Boolean(window.ethereum?.isMetaMask);
-};
+  return typeof window !== "undefined" && Boolean(window.ethereum?.isMetaMask)
+}
 
 export const connectWallet = async (): Promise<WalletState> => {
   if (!isMetaMaskInstalled()) {
-    throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
+    throw new Error("MetaMask is not installed. Please install MetaMask to continue.")
   }
 
   try {
-    const accounts = await window.ethereum!.request({
-      method: 'eth_requestAccounts',
-    }) as string[];
+    const accounts = (await window.ethereum!.request({
+      method: "eth_requestAccounts",
+    })) as string[]
 
-    const chainId = await window.ethereum!.request({
-      method: 'eth_chainId',
-    }) as string;
+    const chainId = (await window.ethereum!.request({
+      method: "eth_chainId",
+    })) as string
 
-    const provider = new ethers.BrowserProvider(window.ethereum!);
-    const balance = await provider.getBalance(accounts[0]);
+    const provider = new ethers.BrowserProvider(window.ethereum!)
+    const balance = await provider.getBalance(accounts[0])
 
     return {
       address: accounts[0],
       isConnected: true,
-      chainId: parseInt(chainId, 16),
+      chainId: Number.parseInt(chainId, 16),
       balance: ethers.formatEther(balance),
-    };
+    }
   } catch (error) {
-    console.error('Failed to connect wallet:', error);
-    throw error;
+    console.error("Failed to connect wallet:", error)
+    throw error
   }
-};
+}
 
 export const disconnectWallet = (): WalletState => {
   return {
@@ -232,39 +292,35 @@ export const disconnectWallet = (): WalletState => {
     isConnected: false,
     chainId: null,
     balance: null,
-  };
-};
+  }
+}
 
 export const getContract = async (withSigner = false) => {
   if (!window.ethereum) {
-    throw new Error('No ethereum provider found');
+    throw new Error("No ethereum provider found")
   }
 
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  
+  const provider = new ethers.BrowserProvider(window.ethereum)
+
   if (withSigner) {
-    const signer = await provider.getSigner();
-    return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    const signer = await provider.getSigner()
+    return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer)
   }
-  
-  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-};
+
+  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider)
+}
 
 export const verifyCertificate = async (tokenId: number): Promise<CertificateDetails> => {
-  const contract = await getContract(false);
-  const result = await contract.verifyCertificate(tokenId);
-  
+  const contract = await getContract(false)
+  const result = await contract.verifyCertificate(tokenId)
+
   return {
     studentName: result[0],
     degree: result[1],
     university: result[2],
     ipfsHash: result[3],
-  };
-};
-
-export interface MintResult {
-  txHash: string;
-  tokenId: number;
+    institutionId: result[4],
+  }
 }
 
 export const mintCertificate = async (
@@ -272,75 +328,70 @@ export const mintCertificate = async (
   studentName: string,
   degree: string,
   university: string,
-  certificateURI: string
-): Promise<MintResult> => {
-  const contract = await getContract(true);
-  const tx = await contract.mintCertificate(
-    recipient,
-    studentName,
-    degree,
-    university,
-    certificateURI
-  );
-  
-  const receipt = await tx.wait();
-  
-  // Extract tokenId from the CertificateMinted event
-  let tokenId: number = 0;
-  
-  for (const log of receipt.logs) {
-    try {
-      const parsedLog = contract.interface.parseLog({
-        topics: log.topics as string[],
-        data: log.data,
-      });
-      
-      if (parsedLog && parsedLog.name === 'CertificateMinted') {
-        tokenId = Number(parsedLog.args.tokenId);
-        break;
-      }
-    } catch {
-      // Skip logs that don't match our contract events
-      continue;
-    }
-  }
-  
-  return {
-    txHash: tx.hash,
-    tokenId,
-  };
-};
+  certificateURI: string,
+  institutionId: string,
+): Promise<string> => {
+  const contract = await getContract(true)
+  const tx = await contract.mintCertificate(recipient, studentName, degree, university, certificateURI, institutionId)
+
+  await tx.wait()
+  return tx.hash
+}
 
 export const emergencyStop = async (): Promise<string> => {
-  const contract = await getContract(true);
-  const tx = await contract.emergencyStop();
-  await tx.wait();
-  return tx.hash;
-};
+  const contract = await getContract(true)
+  const tx = await contract.emergencyStop()
+  await tx.wait()
+  return tx.hash
+}
 
 export const resumeContract = async (): Promise<string> => {
-  const contract = await getContract(true);
-  const tx = await contract.resumeContract();
-  await tx.wait();
-  return tx.hash;
-};
+  const contract = await getContract(true)
+  const tx = await contract.resumeContract()
+  await tx.wait()
+  return tx.hash
+}
 
 export const updateOwner = async (newOwner: string): Promise<string> => {
-  const contract = await getContract(true);
-  const tx = await contract.updateOwner(newOwner);
-  await tx.wait();
-  return tx.hash;
-};
+  const contract = await getContract(true)
+  const tx = await contract.updateOwner(newOwner)
+  await tx.wait()
+  return tx.hash
+}
 
 export const getContractOwner = async (): Promise<string> => {
-  const contract = await getContract(false);
-  return await contract.owner();
-};
+  const contract = await getContract(false)
+  return await contract.owner()
+}
 
 export const formatAddress = (address: string): string => {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
 
 export const formatBalance = (balance: string): string => {
-  return parseFloat(balance).toFixed(4);
-};
+  return Number.parseFloat(balance).toFixed(4)
+}
+
+export const addIssuer = async (issuerAddress: string, institutionId: string): Promise<string> => {
+  const contract = await getContract(true)
+  const tx = await contract.addIssuer(issuerAddress, institutionId)
+  await tx.wait()
+  return tx.hash
+}
+
+export const removeIssuer = async (issuerAddress: string): Promise<string> => {
+  const contract = await getContract(true)
+  const tx = await contract.removeIssuer(issuerAddress)
+  await tx.wait()
+  return tx.hash
+}
+
+export const isAuthorizedIssuer = async (issuerAddress: string): Promise<boolean> => {
+  const contract = await getContract(false)
+  return await contract.isAuthorizedIssuer(issuerAddress)
+}
+
+export const getIssuerInfo = async (issuerAddress: string) => {
+  const contract = await getContract(false)
+  return await contract.getIssuerInfo(issuerAddress)
+}
