@@ -1,17 +1,25 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { Wallet, Shield, AlertCircle, GraduationCap, Loader2, ArrowRight, UserPlus } from 'lucide-react';
-import Navbar from '@/components/Navbar';
+import { Wallet, Shield, AlertCircle, UserPlus, Loader2, ArrowRight } from 'lucide-react';
+import PublicNavbar from '@/components/PublicNavbar';
 import BackButton from '@/components/BackButton';
-import { Link } from 'react-router-dom';
 
+/**
+ * SIGN UP PAGE - For NEW USERS ONLY
+ * 
+ * Flow:
+ * 1. Connect wallet
+ * 2. Sign message
+ * 3. Create new account (fails if wallet already exists)
+ * 4. Redirect to role selection
+ */
 const SignUpPage = () => {
   const navigate = useNavigate();
-  const { wallet, connect, isConnecting, error: walletError, isMetaMaskAvailable } = useWallet();
-  const { user, profile, roles, isAuthenticating, authenticateWallet, error: authError, isLoading, profileLoaded } = useAuth();
+  const { wallet, connect, disconnect, isConnecting, error: walletError, isMetaMaskAvailable } = useWallet();
+  const { user, profile, roles, isAuthenticating, signUpWallet, error: authError, isLoading, profileLoaded } = useAuth();
   const [showMetaMaskWarning, setShowMetaMaskWarning] = useState(false);
   const [authStep, setAuthStep] = useState<'connect' | 'sign' | 'complete'>('connect');
 
@@ -20,10 +28,10 @@ const SignUpPage = () => {
     if (!isLoading && !profileLoaded) return;
     
     if (user) {
-      // If already onboarded, go to dashboard
+      // If already onboarded with roles, go to dashboard
       if (profile?.onboarded && roles.length > 0) {
         const primaryRole = roles[0];
-        const dashboardPaths = {
+        const dashboardPaths: Record<string, string> = {
           student: '/dashboard/student',
           issuer: '/dashboard/institution',
           verifier: '/dashboard/verifier',
@@ -36,6 +44,13 @@ const SignUpPage = () => {
       }
     }
   }, [user, profile, roles, isLoading, profileLoaded, navigate]);
+
+  // Update step when wallet connects
+  useEffect(() => {
+    if (wallet.isConnected && authStep === 'connect') {
+      setAuthStep('sign');
+    }
+  }, [wallet.isConnected, authStep]);
 
   const handleConnect = async () => {
     if (!isMetaMaskAvailable) {
@@ -50,22 +65,25 @@ const SignUpPage = () => {
     }
   };
 
-  const handleAuthenticate = async () => {
+  const handleSignUp = async () => {
     if (!wallet.address) return;
     
-    setAuthStep('sign');
     try {
-      await authenticateWallet(wallet.address);
+      await signUpWallet(wallet.address);
       setAuthStep('complete');
       // Redirect will be handled by useEffect
     } catch (err) {
-      setAuthStep('connect');
-      console.error('Authentication failed:', err);
+      console.error('Sign up failed:', err);
+      // Error is already set in context
     }
   };
 
+  const handleDisconnect = () => {
+    disconnect();
+    setAuthStep('connect');
+  };
+
   const error = walletError || authError;
-  const isProcessing = isConnecting || isAuthenticating;
 
   if (isLoading) {
     return (
@@ -77,7 +95,7 @@ const SignUpPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar />
+      <PublicNavbar />
       
       <main className="flex-1 flex flex-col pt-20 pb-16 px-4">
         <div className="container mx-auto max-w-md">
@@ -147,22 +165,28 @@ const SignUpPage = () => {
               {wallet.isConnected ? (
                 <>
                   <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/10 border border-primary/30 mb-6">
-                    <Wallet className="w-5 h-5 text-primary" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">Wallet Connected</p>
                       <p className="text-xs text-muted-foreground truncate">{wallet.address}</p>
                     </div>
+                    <button 
+                      onClick={handleDisconnect}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Disconnect
+                    </button>
                   </div>
 
                   <button
-                    onClick={handleAuthenticate}
+                    onClick={handleSignUp}
                     disabled={isAuthenticating}
                     className="w-full btn-primary mb-6"
                   >
                     {isAuthenticating ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        {authStep === 'sign' ? 'Sign the message in MetaMask...' : 'Creating account...'}
+                        Creating account...
                       </>
                     ) : (
                       <>

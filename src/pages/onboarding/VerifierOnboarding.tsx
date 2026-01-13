@@ -15,67 +15,42 @@ import BackButton from '@/components/BackButton'
  * VERIFIER ONBOARDING
  *
  * Rules:
- * - Profile MAY exist before onboarding (valid)
- * - Only block if onboarded === true
- * - Allow incomplete profiles to continue onboarding
+ * - User must be authenticated
+ * - User must not be onboarded yet
+ * - Sets role to 'verifier' and onboarded to true
+ * - Creates verifier_profiles entry
  */
 const VerifierOnboarding = () => {
   const navigate = useNavigate()
-  const { user, refreshProfile } = useAuth()
+  const { user, refreshProfile, profile } = useAuth()
   const { wallet } = useWallet()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [existingProfile, setExistingProfile] = useState<any>(null)
 
   const [formData, setFormData] = useState({
     displayName: '',
     organization: '',
   })
 
-  /**
-   * 🔍 Load profile once
-   * - Do NOT block if profile exists
-   * - Redirect only if already onboarded
-   */
+  // Redirect if already onboarded
   useEffect(() => {
-    if (!user) return
-
-    const loadProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (error) {
-        console.error('Profile fetch failed:', error)
-        return
-      }
-
-      const profile = data as any
-
-      if (profile?.onboarded === true) {
-        navigate('/dashboard/verifier', { replace: true })
-        return
-      }
-
-      setExistingProfile(profile)
+    if (profile?.onboarded === true) {
+      navigate('/dashboard/verifier', { replace: true })
     }
-
-    loadProfile()
-  }, [user, navigate])
+  }, [profile, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (isSubmitting) return
+
     if (!user) {
       toast.error('Please sign in first')
-      navigate('/auth/sign-in')
+      navigate('/auth/sign-up')
       return
     }
 
-    const walletAddress =
-      wallet.address || user.user_metadata?.wallet_address
+    const walletAddress = wallet.address || user.user_metadata?.wallet_address
 
     if (!walletAddress) {
       toast.error('Wallet address not found. Please reconnect your wallet.')
@@ -85,60 +60,42 @@ const VerifierOnboarding = () => {
     setIsSubmitting(true)
 
     try {
-      /**
-       * 🚫 Block ONLY if already onboarded
-       */
-      if (existingProfile?.onboarded === true) {
-        navigate('/dashboard/verifier', { replace: true })
-        return
-      }
-
-      /**
-       * 🔁 CONDITIONAL PROFILE LOGIC
-       */
-      if (existingProfile) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            role: 'verifier',
-            display_name: formData.displayName,
-            institution: formData.organization || null,
-            onboarded: true,
-          })
-          .eq('user_id', user.id)
-
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from('profiles').insert({
+      // Step 1: Update/Insert profile with role and onboarded flag
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
           user_id: user.id,
           wallet_address: walletAddress.toLowerCase(),
           role: 'verifier',
           display_name: formData.displayName,
           institution: formData.organization || null,
           onboarded: true,
-        })
+        }, { onConflict: 'user_id' })
 
-        if (error) throw error
+      if (profileError) {
+        console.error('Profile upsert error:', profileError)
+        throw new Error('Failed to save profile')
       }
 
-      /**
-       * ✅ Assign role (safe & idempotent)
-       */
+      // Step 2: Assign role in user_roles table
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
           { user_id: user.id, role: 'verifier' },
-          { onConflict: 'user_id,role', ignoreDuplicates: true }
+          { onConflict: 'user_id,role' }
         )
 
-      if (roleError) throw roleError
+      if (roleError) {
+        console.error('Role assignment error:', roleError)
+        throw new Error('Failed to assign role')
+      }
 
       await refreshProfile()
       toast.success('Verifier account created!')
-      navigate('/dashboard/verifier')
-    } catch (err) {
+      navigate('/dashboard/verifier', { replace: true })
+    } catch (err: any) {
       console.error('Verifier onboarding error:', err)
-      toast.error('Failed to complete setup. Please try again.')
+      toast.error(err.message || 'Failed to complete setup. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -173,24 +130,34 @@ const VerifierOnboarding = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <input
-                className="input-glass"
-                placeholder="Your Name"
-                value={formData.displayName}
-                onChange={(e) =>
-                  setFormData({ ...formData, displayName: e.target.value })
-                }
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Your Name <span className="text-destructive">*</span>
+                </label>
+                <input
+                  className="input-glass"
+                  placeholder="Enter your name"
+                  value={formData.displayName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, displayName: e.target.value })
+                  }
+                  required
+                />
+              </div>
 
-              <input
-                className="input-glass"
-                placeholder="Organization (optional)"
-                value={formData.organization}
-                onChange={(e) =>
-                  setFormData({ ...formData, organization: e.target.value })
-                }
-              />
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Organization (optional)
+                </label>
+                <input
+                  className="input-glass"
+                  placeholder="Enter your organization"
+                  value={formData.organization}
+                  onChange={(e) =>
+                    setFormData({ ...formData, organization: e.target.value })
+                  }
+                />
+              </div>
 
               <button
                 type="submit"

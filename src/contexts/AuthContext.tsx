@@ -8,14 +8,13 @@ import {
   type ReactNode,
 } from "react"
 import { supabase } from "@/integrations/supabase/client"
-import { authenticateWithWallet } from "@/lib/walletAuth"
+import { loginWithWallet, signUpWithWallet } from "@/lib/walletAuth"
 import type { User, Session } from "@supabase/supabase-js"
 
 export type UserRole = "student" | "issuer" | "verifier" | "admin"
 
 /**
  * App-facing profile shape.
- * Note: generated DB types may lag behind schema changes, so we keep this permissive.
  */
 interface Profile {
   id: string
@@ -23,8 +22,8 @@ interface Profile {
   wallet_address: string
   display_name: string | null
   institution: string | null
+  role: string | null
   onboarded?: boolean | null
-  // Allow additional columns without breaking assignability.
   [key: string]: unknown
 }
 
@@ -38,6 +37,10 @@ interface AuthContextType {
   isOnboarded: boolean
   isAuthenticating: boolean
   error: string | null
+  // Separate signup and login functions
+  signUpWallet: (walletAddress: string) => Promise<{ isNewUser: boolean }>
+  loginWallet: (walletAddress: string) => Promise<void>
+  // Legacy function for backwards compatibility
   authenticateWallet: (walletAddress: string) => Promise<void>
   refreshProfile: () => Promise<void>
   hasRole: (role: UserRole) => boolean
@@ -92,22 +95,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
-  /* ---------------- WALLET AUTH ---------------- */
+  /* ---------------- SIGNUP (NEW USERS ONLY) ---------------- */
 
-  const authenticateWallet = async (walletAddress: string) => {
+  const signUpWallet = async (walletAddress: string): Promise<{ isNewUser: boolean }> => {
     if (!walletAddress) throw new Error("Wallet address missing")
 
     setError(null)
     setIsAuthenticating(true)
     try {
-      await authenticateWithWallet(walletAddress)
+      const result = await signUpWithWallet(walletAddress)
+      return { isNewUser: result.isNewUser }
     } catch (e: any) {
-      const message = e?.message || "Authentication failed"
+      const message = e?.message || "Sign up failed"
       setError(message)
       throw e
     } finally {
       setIsAuthenticating(false)
     }
+  }
+
+  /* ---------------- LOGIN (EXISTING USERS ONLY) ---------------- */
+
+  const loginWallet = async (walletAddress: string): Promise<void> => {
+    if (!walletAddress) throw new Error("Wallet address missing")
+
+    setError(null)
+    setIsAuthenticating(true)
+    try {
+      await loginWithWallet(walletAddress)
+    } catch (e: any) {
+      const message = e?.message || "Login failed"
+      setError(message)
+      throw e
+    } finally {
+      setIsAuthenticating(false)
+    }
+  }
+
+  /* ---------------- LEGACY AUTH (for backwards compat) ---------------- */
+
+  const authenticateWallet = async (walletAddress: string) => {
+    return loginWallet(walletAddress)
   }
 
   /* ---------------- AUTH BOOTSTRAP ---------------- */
@@ -186,6 +214,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isOnboarded,
         isAuthenticating,
         error,
+        signUpWallet,
+        loginWallet,
         authenticateWallet,
         refreshProfile,
         hasRole,

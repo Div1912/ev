@@ -18,10 +18,36 @@ interface VerifyResponse {
   };
   token_hash: string;
   verification_url: string;
+  is_new_user: boolean;
+}
+
+interface CheckWalletResponse {
+  exists: boolean;
+  onboarded: boolean;
+  role: string | null;
 }
 
 function toFriendlyAuthError(): Error {
   return new Error(FRIENDLY_VERIFY_ERROR);
+}
+
+/**
+ * Check if a wallet address already has an account
+ */
+export async function checkWalletExists(walletAddress: string): Promise<CheckWalletResponse> {
+  const response = await fetch(`${WALLET_AUTH_URL}/check-wallet`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ wallet_address: walletAddress.toLowerCase() }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to check wallet status');
+  }
+
+  return response.json();
 }
 
 /**
@@ -68,45 +94,106 @@ export async function signLoginMessage(connectedWalletAddress: string): Promise<
 /**
  * Verify signature via the wallet-auth edge function.
  */
-export async function verifySignature(payload: {
-  wallet_address: string;
-  signature: string;
-  message: typeof WALLET_SIGN_MESSAGE;
-}): Promise<VerifyResponse> {
+export async function verifySignature(
+  payload: {
+    wallet_address: string;
+    signature: string;
+    message: typeof WALLET_SIGN_MESSAGE;
+  },
+  mode: 'signup' | 'login' = 'login'
+): Promise<VerifyResponse> {
   const response = await fetch(`${WALLET_AUTH_URL}/verify`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, mode }),
   });
 
   if (!response.ok) {
-    // Never surface backend technical details to end-users for auth.
-    throw toFriendlyAuthError();
+    const errorData = await response.json().catch(() => ({}));
+    
+    // Return specific error messages for known error codes
+    if (errorData.code === 'USER_NOT_FOUND') {
+      throw new Error('No account found with this wallet. Please sign up first.');
+    }
+    if (errorData.code === 'USER_EXISTS') {
+      throw new Error('An account already exists with this wallet. Please log in instead.');
+    }
+    
+    throw new Error(errorData.error || FRIENDLY_VERIFY_ERROR);
   }
 
   return response.json();
 }
 
 /**
- * Complete wallet authentication flow
+ * Complete wallet authentication flow for SIGNUP (new users only)
  */
-export async function authenticateWithWallet(connectedWalletAddress: string): Promise<{
+export async function signUpWithWallet(connectedWalletAddress: string): Promise<{
   user: VerifyResponse['user'];
   session: boolean;
+  isNewUser: boolean;
 }> {
-  // Step 1: Sign the fixed message
+  // Step 1: Check if wallet already exists
+  const walletStatus = await checkWalletExists(connectedWalletAddress);
+  
+  if (walletStatus.exists) {
+    throw new Error('An account already exists with this wallet. Please log in instead.');
+  }
+
+  // Step 2: Sign the fixed message
   const signed = await signLoginMessage(connectedWalletAddress);
 
-  // Step 2: Verify signature and get magic link token hash
+  // Step 3: Verify signature and create new user (signup mode)
   const verifyResult = await verifySignature({
     wallet_address: signed.wallet_address,
     signature: signed.signature,
     message: signed.message,
+  }, 'signup');
+
+  // Step 4: Establish Supabase session
+  const { error } = await supabase.auth.verifyOtp({
+    token_hash: verifyResult.token_hash,
+    type: 'magiclink',
   });
 
-  // Step 3: Establish Supabase session
+  if (error) {
+    throw toFriendlyAuthError();
+  }
+
+  return {
+    user: verifyResult.user,
+    session: true,
+    isNewUser: verifyResult.is_new_user,
+  };
+}
+
+/**
+ * Complete wallet authentication flow for LOGIN (existing users only)
+ */
+export async function loginWithWallet(connectedWalletAddress: string): Promise<{
+  user: VerifyResponse['user'];
+  session: boolean;
+}> {
+  // Step 1: Check if wallet exists
+  const walletStatus = await checkWalletExists(connectedWalletAddress);
+  
+  if (!walletStatus.exists) {
+    throw new Error('No account found with this wallet. Please sign up first.');
+  }
+
+  // Step 2: Sign the fixed message
+  const signed = await signLoginMessage(connectedWalletAddress);
+
+  // Step 3: Verify signature (login mode - user must exist)
+  const verifyResult = await verifySignature({
+    wallet_address: signed.wallet_address,
+    signature: signed.signature,
+    message: signed.message,
+  }, 'login');
+
+  // Step 4: Establish Supabase session
   const { error } = await supabase.auth.verifyOtp({
     token_hash: verifyResult.token_hash,
     type: 'magiclink',
@@ -120,6 +207,17 @@ export async function authenticateWithWallet(connectedWalletAddress: string): Pr
     user: verifyResult.user,
     session: true,
   };
+}
+
+/**
+ * Legacy function - kept for backwards compatibility
+ * Now defaults to login behavior
+ */
+export async function authenticateWithWallet(connectedWalletAddress: string): Promise<{
+  user: VerifyResponse['user'];
+  session: boolean;
+}> {
+  return loginWithWallet(connectedWalletAddress);
 }
 
 /**
