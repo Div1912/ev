@@ -13,6 +13,7 @@ import AuthGate from "@/components/AuthGate" // ✅ ADD THIS
 import Index from "./pages/Index"
 import Verify from "./pages/Verify"
 import SignIn from "./pages/auth/SignIn"
+import SignUp from "./pages/auth/SignUp"
 
 // Onboarding
 import SelectRole from "./pages/onboarding/SelectRole"
@@ -79,6 +80,7 @@ const App = () => (
                  * AUTH ROUTES
                  * -------------------------------------------------- */}
                 <Route path="/auth/sign-in" element={<SignIn />} />
+                <Route path="/auth/sign-up" element={<SignUp />} />
                 <Route path="/login" element={<Navigate to="/auth/sign-in" replace />} />
 
                 {/* --------------------------------------------------

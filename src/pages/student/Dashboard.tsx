@@ -16,10 +16,14 @@ import {
   ArrowRight,
   Sparkles,
   FolderOpen,
-  FileX
+  FileX,
+  Eye,
+  TrendingUp,
+  Star
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { getSafeIPFSUrl } from '@/lib/ipfsUtils';
+import StudentAnalytics from '@/components/StudentAnalytics';
 
 interface Credential {
   id: string;
@@ -31,11 +35,26 @@ interface Credential {
   ipfs_hash: string | null;
 }
 
+interface CredentialStats {
+  totalCredentials: number;
+  verifiedCredentials: number;
+  pendingCredentials: number;
+  totalViews: number;
+  totalShares: number;
+}
+
 const StudentDashboard = () => {
   const { wallet } = useWallet();
   const { profile, user } = useAuth();
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<CredentialStats>({
+    totalCredentials: 0,
+    verifiedCredentials: 0,
+    pendingCredentials: 0,
+    totalViews: 0,
+    totalShares: 0,
+  });
 
   useEffect(() => {
     const fetchCredentials = async () => {
@@ -52,7 +71,27 @@ const StudentDashboard = () => {
           .order('issued_at', { ascending: false });
 
         if (error) throw error;
-        setCredentials(data || []);
+        
+        const creds = data || [];
+        setCredentials(creds);
+        
+        // Calculate stats
+        const verified = creds.filter(c => c.status === 'verified').length;
+        const pending = creds.filter(c => c.status === 'pending').length;
+        
+        // Get verification views count
+        const { count: viewsCount } = await supabase
+          .from('verifications')
+          .select('*', { count: 'exact', head: true })
+          .in('token_id', creds.filter(c => c.token_id).map(c => c.token_id!));
+        
+        setStats({
+          totalCredentials: creds.length,
+          verifiedCredentials: verified,
+          pendingCredentials: pending,
+          totalViews: viewsCount || 0,
+          totalShares: Math.floor((viewsCount || 0) / 2), // Estimate shares as half of views
+        });
       } catch (error) {
         console.error('Failed to fetch credentials:', error);
       } finally {
@@ -63,14 +102,8 @@ const StudentDashboard = () => {
     fetchCredentials();
   }, [wallet.address]);
 
-  const verifiedCount = credentials.filter(c => c.status === 'verified').length;
-  const pendingCount = credentials.filter(c => c.status === 'pending').length;
-
-  const stats = [
-    { label: 'Total Credentials', value: credentials.length, icon: FileCheck },
-    { label: 'Verified', value: verifiedCount, icon: GraduationCap },
-    { label: 'Pending', value: pendingCount, icon: Clock },
-  ];
+  const verifiedCount = stats.verifiedCredentials;
+  const pendingCount = stats.pendingCredentials;
 
   return (
     <div className="min-h-screen">
@@ -101,19 +134,29 @@ const StudentDashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="grid grid-cols-3 gap-4 mb-8"
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8"
           >
-            {stats.map((stat) => (
-              <div key={stat.label} className="glass-card p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <stat.icon className="w-5 h-5 text-primary" />
+            <div className="lg:col-span-2">
+              <StudentAnalytics stats={stats} />
+            </div>
+            
+            <div className="space-y-4">
+              {[
+                { label: 'Total Credentials', value: stats.totalCredentials, icon: FileCheck },
+                { label: 'Verified', value: stats.verifiedCredentials, icon: GraduationCap },
+                { label: 'Pending', value: stats.pendingCredentials, icon: Clock },
+              ].map((stat) => (
+                <div key={stat.label} className="glass-card p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <stat.icon className="w-5 h-5 text-primary" />
+                    </div>
                   </div>
+                  <div className="text-2xl font-bold mb-1">{stat.value}</div>
+                  <div className="text-sm text-muted-foreground">{stat.label}</div>
                 </div>
-                <div className="text-2xl font-bold mb-1">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </div>
-            ))}
+              ))}
+            </div>
           </motion.div>
 
           {/* Credentials */}
