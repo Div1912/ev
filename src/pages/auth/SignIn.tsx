@@ -1,23 +1,36 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
-import { Wallet, Shield, AlertCircle, GraduationCap, Loader2, ArrowLeft } from 'lucide-react';
+import { Wallet, Shield, AlertCircle, GraduationCap, Loader2, ArrowLeft, LogIn } from 'lucide-react';
 import PublicNavbar from '@/components/PublicNavbar';
 
+/**
+ * SIGN IN PAGE - For EXISTING USERS ONLY
+ * 
+ * Flow:
+ * 1. Connect wallet
+ * 2. Sign message
+ * 3. Login (fails if wallet doesn't exist)
+ * 4. Redirect to appropriate dashboard based on role
+ * 
+ * NEVER shows role selection - that's only for signup
+ */
 const SignInPage = () => {
   const navigate = useNavigate();
   const { wallet, connect, disconnect, isConnecting, error: walletError, isMetaMaskAvailable } = useWallet();
-  const { user, profile, roles, isAuthenticating, authenticateWallet, error: authError, isLoading } = useAuth();
+  const { user, profile, roles, isAuthenticating, loginWallet, error: authError, isLoading, profileLoaded } = useAuth();
   const [showMetaMaskWarning, setShowMetaMaskWarning] = useState(false);
   const [authStep, setAuthStep] = useState<'initial' | 'connected' | 'signing' | 'complete'>('initial');
 
   // Handle redirect for authenticated users
   useEffect(() => {
-    if (!isLoading && user) {
-      // If user has profile and roles, go to dashboard
-      if (profile && roles.length > 0) {
+    if (!isLoading && !profileLoaded) return;
+    
+    if (user) {
+      // If user has roles, go to dashboard
+      if (roles.length > 0) {
         const primaryRole = roles[0];
         const dashboardPaths: Record<UserRole, string> = {
           student: '/dashboard/student',
@@ -26,12 +39,12 @@ const SignInPage = () => {
           admin: '/dashboard/admin',
         };
         navigate(dashboardPaths[primaryRole], { replace: true });
-      } else {
-        // New user - needs role selection
+      } else if (!profile?.onboarded) {
+        // User exists but not onboarded - redirect to complete onboarding
         navigate('/onboarding/select-role', { replace: true });
       }
     }
-  }, [user, profile, roles, isLoading, navigate]);
+  }, [user, profile, roles, isLoading, profileLoaded, navigate]);
 
   // Update auth step when wallet connects
   useEffect(() => {
@@ -53,17 +66,17 @@ const SignInPage = () => {
     }
   };
 
-  const handleAuthenticate = async () => {
+  const handleLogin = async () => {
     if (!wallet.address) return;
     
     setAuthStep('signing');
     try {
-      await authenticateWallet(wallet.address);
+      await loginWallet(wallet.address);
       setAuthStep('complete');
       // Redirect will be handled by useEffect
     } catch (err) {
       setAuthStep('connected');
-      console.error('Authentication failed:', err);
+      console.error('Login failed:', err);
     }
   };
 
@@ -73,7 +86,6 @@ const SignInPage = () => {
   };
 
   const error = walletError || authError;
-  const isProcessing = isConnecting || isAuthenticating;
 
   if (isLoading) {
     return (
@@ -109,19 +121,16 @@ const SignInPage = () => {
             <div className="glass-card p-8 md:p-10">
               <div className="text-center mb-8">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-primary mb-6">
-                  <GraduationCap className="w-8 h-8 text-white" />
+                  <LogIn className="w-8 h-8 text-white" />
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-                  Welcome to <span className="gradient-text">EduVerify</span>
+                  Welcome <span className="gradient-text">Back</span>
                 </h1>
                 <p className="text-muted-foreground">
                   {authStep === 'connected' 
                     ? 'Sign the message to verify wallet ownership'
-                    : 'Connect your wallet to sign in or create an account'
+                    : 'Connect your wallet to sign in'
                   }
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  New users will select their role after authentication
                 </p>
               </div>
 
@@ -178,19 +187,19 @@ const SignInPage = () => {
                   </div>
 
                   <button
-                    onClick={handleAuthenticate}
+                    onClick={handleLogin}
                     disabled={isAuthenticating}
                     className="w-full btn-primary mb-6"
                   >
                     {isAuthenticating ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        {authStep === 'signing' ? 'Sign the message in MetaMask...' : 'Verifying...'}
+                        {authStep === 'signing' ? 'Sign the message in MetaMask...' : 'Signing in...'}
                       </>
                     ) : (
                       <>
                         <Shield className="w-5 h-5" />
-                        Sign Message to Authenticate
+                        Sign In
                       </>
                     )}
                   </button>
@@ -219,7 +228,7 @@ const SignInPage = () => {
                 </button>
               )}
 
-              <div className="space-y-3">
+              <div className="space-y-3 mb-6">
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Shield className="w-4 h-4 text-primary" />
@@ -232,6 +241,15 @@ const SignInPage = () => {
                   </div>
                   <span>No passwords needed - your wallet is your identity</span>
                 </div>
+              </div>
+
+              <div className="text-center pt-4 border-t border-white/10">
+                <p className="text-sm text-muted-foreground">
+                  Don't have an account?{' '}
+                  <Link to="/auth/sign-up" className="text-primary hover:underline font-medium">
+                    Sign up
+                  </Link>
+                </p>
               </div>
             </div>
           </motion.div>

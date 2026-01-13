@@ -15,17 +15,17 @@ import BackButton from '@/components/BackButton'
  * INSTITUTION ONBOARDING
  *
  * Rules:
- * - Profile MAY exist before onboarding
- * - Block ONLY if onboarded === true
- * - Safe on refresh / retry / tab switch
+ * - User must be authenticated
+ * - User must not be onboarded yet
+ * - Sets role to 'issuer' and onboarded to true
+ * - Creates institution_profiles entry
  */
 const InstitutionOnboarding = () => {
   const navigate = useNavigate()
-  const { user, refreshProfile } = useAuth()
+  const { user, refreshProfile, profile } = useAuth()
   const { wallet } = useWallet()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [existingProfile, setExistingProfile] = useState<any>(null)
 
   const [formData, setFormData] = useState({
     institutionName: '',
@@ -42,40 +42,13 @@ const InstitutionOnboarding = () => {
     'Other',
   ]
 
-  /* --------------------------------------------------
-   * Load profile ONCE
-   * -------------------------------------------------- */
+  // Redirect if already onboarded
   useEffect(() => {
-    if (!user) return
-
-    const loadProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (error) {
-        console.error('Profile fetch failed:', error)
-        return
-      }
-
-      const profile = data as any
-
-      if (profile?.onboarded === true) {
-        navigate('/dashboard/institution', { replace: true })
-        return
-      }
-
-      setExistingProfile(profile)
+    if (profile?.onboarded === true) {
+      navigate('/dashboard/institution', { replace: true })
     }
+  }, [profile, navigate])
 
-    loadProfile()
-  }, [user, navigate])
-
-  /* --------------------------------------------------
-   * Submit handler
-   * -------------------------------------------------- */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -83,12 +56,11 @@ const InstitutionOnboarding = () => {
 
     if (!user) {
       toast.error('Please sign in first')
-      navigate('/auth/sign-in')
+      navigate('/auth/sign-up')
       return
     }
 
-    const walletAddress =
-      wallet.address || user.user_metadata?.wallet_address
+    const walletAddress = wallet.address || user.user_metadata?.wallet_address
 
     if (!walletAddress) {
       toast.error('Wallet address not found. Please reconnect your wallet.')
@@ -98,46 +70,24 @@ const InstitutionOnboarding = () => {
     setIsSubmitting(true)
 
     try {
-      // 🚫 Block ONLY if already onboarded
-      if (existingProfile?.onboarded === true) {
-        navigate('/dashboard/institution', { replace: true })
-        return
+      // Step 1: Update/Insert profile with role and onboarded flag
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: user.id,
+          wallet_address: walletAddress.toLowerCase(),
+          role: 'issuer',
+          display_name: formData.displayName,
+          institution: formData.institutionName,
+          onboarded: true,
+        }, { onConflict: 'user_id' })
+
+      if (profileError) {
+        console.error('Profile upsert error:', profileError)
+        throw new Error('Failed to save profile')
       }
 
-      // 🔁 UPDATE or INSERT (IDEMPOTENT)
-      if (existingProfile) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            role: 'issuer',
-            display_name: formData.displayName,
-            institution: formData.institutionName,
-            institution_type: formData.institutionType,
-            onboarded: true,
-          })
-          .eq('user_id', user.id)
-
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: user.id,
-            wallet_address: walletAddress.toLowerCase(),
-            role: 'issuer',
-            display_name: formData.displayName,
-            institution: formData.institutionName,
-            institution_type: formData.institutionType,
-            onboarded: true,
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-        setExistingProfile(data)
-      }
-
-      // ✅ Assign role (idempotent)
+      // Step 2: Assign role in user_roles table
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
@@ -145,24 +95,22 @@ const InstitutionOnboarding = () => {
           { onConflict: 'user_id,role' }
         )
 
-      if (roleError) throw roleError
+      if (roleError) {
+        console.error('Role assignment error:', roleError)
+        throw new Error('Failed to assign role')
+      }
 
-      // 🔁 Sync auth context
       await refreshProfile()
-
       toast.success('Institution registered successfully!')
       navigate('/dashboard/institution', { replace: true })
-    } catch (err) {
+    } catch (err: any) {
       console.error('Institution onboarding error:', err)
-      toast.error('Failed to complete registration. Please try again.')
+      toast.error(err.message || 'Failed to complete registration. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  /* --------------------------------------------------
-   * UI
-   * -------------------------------------------------- */
   return (
     <div className="min-h-screen flex flex-col">
       <PublicNavbar />
@@ -192,41 +140,56 @@ const InstitutionOnboarding = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <input
-                className="input-glass"
-                placeholder="Institution Name"
-                value={formData.institutionName}
-                onChange={(e) =>
-                  setFormData({ ...formData, institutionName: e.target.value })
-                }
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Institution Name <span className="text-destructive">*</span>
+                </label>
+                <input
+                  className="input-glass"
+                  placeholder="Enter institution name"
+                  value={formData.institutionName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, institutionName: e.target.value })
+                  }
+                  required
+                />
+              </div>
 
-              <select
-                className="input-glass"
-                value={formData.institutionType}
-                onChange={(e) =>
-                  setFormData({ ...formData, institutionType: e.target.value })
-                }
-                required
-              >
-                <option value="">Select institution type</option>
-                {institutionTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Institution Type <span className="text-destructive">*</span>
+                </label>
+                <select
+                  className="input-glass"
+                  value={formData.institutionType}
+                  onChange={(e) =>
+                    setFormData({ ...formData, institutionType: e.target.value })
+                  }
+                  required
+                >
+                  <option value="">Select institution type</option>
+                  {institutionTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <input
-                className="input-glass"
-                placeholder="Your Name"
-                value={formData.displayName}
-                onChange={(e) =>
-                  setFormData({ ...formData, displayName: e.target.value })
-                }
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Your Name <span className="text-destructive">*</span>
+                </label>
+                <input
+                  className="input-glass"
+                  placeholder="Enter your name"
+                  value={formData.displayName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, displayName: e.target.value })
+                  }
+                  required
+                />
+              </div>
 
               <button
                 type="submit"

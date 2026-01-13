@@ -11,14 +11,11 @@ const SIGN_MESSAGE = 'EduVerify login: Sign this message to verify wallet owners
 
 const FRIENDLY_VERIFY_ERROR = 'Wallet verification failed. Please reconnect your wallet and try again.';
 
-interface NonceRequest {
-  wallet_address: string;
-}
-
 interface VerifyRequest {
   wallet_address: string;
   signature: string;
   message: string;
+  mode?: 'signup' | 'login'; // Explicit mode for signup vs login
 }
 
 // Validate Ethereum address format
@@ -53,7 +50,7 @@ Deno.serve(async (req) => {
 
     // Backward-compatible endpoint: returns the fixed message (no nonce, no dynamic text)
     if (action === 'nonce' || action === 'wallet-auth') {
-      const { wallet_address } = body as NonceRequest;
+      const { wallet_address } = body;
 
       if (!wallet_address || !isValidAddress(wallet_address)) {
         return new Response(JSON.stringify({ error: 'Invalid wallet address' }), {
@@ -68,9 +65,47 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Check if wallet exists (for frontend to determine signup vs login)
+    if (action === 'check-wallet') {
+      const { wallet_address } = body;
+
+      if (!wallet_address || !isValidAddress(wallet_address)) {
+        return new Response(JSON.stringify({ error: 'Invalid wallet address' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const normalizedAddress = wallet_address.toLowerCase();
+
+      // Check if profile exists with this wallet
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, user_id, role, onboarded')
+        .eq('wallet_address', normalizedAddress)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('Failed to lookup profile:', profileError);
+        return new Response(JSON.stringify({ error: 'Failed to check wallet' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({
+        exists: !!existingProfile?.user_id,
+        onboarded: existingProfile?.onboarded ?? false,
+        role: existingProfile?.role ?? null,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Action: Verify signature and create session
     if (action === 'verify') {
-      const { wallet_address, signature, message } = body as VerifyRequest;
+      const { wallet_address, signature, message, mode = 'login' } = body as VerifyRequest;
 
       if (!wallet_address || !isValidAddress(wallet_address) || !signature || !message) {
         return new Response(JSON.stringify({ error: FRIENDLY_VERIFY_ERROR }), {
@@ -111,10 +146,10 @@ Deno.serve(async (req) => {
       // Deterministic email identity for this wallet.
       const email = `${normalizedAddress}@wallet.eduverify.local`;
 
-      // Try to locate an existing profile by wallet address (fast, doesn't require listing users)
+      // Try to locate an existing profile by wallet address
       const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, user_id')
+        .select('id, user_id, role, onboarded')
         .eq('wallet_address', normalizedAddress)
         .maybeSingle();
 
@@ -128,8 +163,21 @@ Deno.serve(async (req) => {
 
       let userId: string;
       let userEmail: string = email;
+      let isNewUser = false;
 
-      if (existingProfile?.user_id) {
+      // ===== LOGIN MODE =====
+      if (mode === 'login') {
+        // For login, user MUST already exist
+        if (!existingProfile?.user_id) {
+          return new Response(JSON.stringify({ 
+            error: 'No account found with this wallet. Please sign up first.',
+            code: 'USER_NOT_FOUND'
+          }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         userId = existingProfile.user_id;
         const { data: userData, error: getUserError } = await supabase.auth.admin.getUserById(userId);
 
@@ -142,7 +190,20 @@ Deno.serve(async (req) => {
         }
 
         userEmail = userData.user.email ?? email;
-      } else {
+      }
+      // ===== SIGNUP MODE =====
+      else if (mode === 'signup') {
+        // For signup, user must NOT already exist
+        if (existingProfile?.user_id) {
+          return new Response(JSON.stringify({ 
+            error: 'An account already exists with this wallet. Please log in instead.',
+            code: 'USER_EXISTS'
+          }), {
+            status: 409,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
         // Create new Auth user
         const { data: newUserData, error: createError } = await supabase.auth.admin.createUser({
           email,
@@ -162,39 +223,32 @@ Deno.serve(async (req) => {
 
         userId = newUserData.user.id;
         userEmail = newUserData.user.email ?? email;
+        isNewUser = true;
 
-        // Ensure profile exists and is linked to user_id
+        // Create minimal profile (NO role assignment - that happens during onboarding)
+        // DO NOT set role here - user must select role during onboarding
         if (existingProfile) {
+          // Link existing orphan profile to user
           await supabase
             .from('profiles')
             .update({ user_id: userId })
             .eq('id', existingProfile.id);
         } else {
-          await supabase.from('profiles').insert({
+          // Create new profile without role - role is set during onboarding
+          const { error: profileInsertError } = await supabase.from('profiles').insert({
             user_id: userId,
             wallet_address: normalizedAddress,
-            role: 'student',
+            role: 'pending', // Placeholder - will be updated during onboarding
+            onboarded: false,
           });
-        }
-
-        // Ensure default role exists
-        const { data: existingRole, error: roleLookupError } = await supabase
-          .from('user_roles')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('role', 'student')
-          .maybeSingle();
-
-        if (roleLookupError) {
-          console.error('Failed to lookup user role:', roleLookupError);
-        } else if (!existingRole) {
-          const { error: roleInsertError } = await supabase
-            .from('user_roles')
-            .insert({ user_id: userId, role: 'student' });
-          if (roleInsertError) {
-            console.error('Failed to insert user role:', roleInsertError);
+          
+          if (profileInsertError) {
+            console.error('Failed to create profile:', profileInsertError);
+            // Don't fail the whole request - user can still complete onboarding
           }
         }
+
+        // DO NOT insert user_roles here - that happens during onboarding
       }
 
       // Generate a magic link token for client-side session establishment.
@@ -221,6 +275,7 @@ Deno.serve(async (req) => {
           },
           token_hash: linkData.properties.hashed_token,
           verification_url: linkData.properties.action_link,
+          is_new_user: isNewUser,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -238,4 +293,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-

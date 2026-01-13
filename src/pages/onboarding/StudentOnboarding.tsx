@@ -15,17 +15,17 @@ import BackButton from '@/components/BackButton'
  * STUDENT ONBOARDING
  *
  * Rules:
- * - Profile MAY exist before onboarding
- * - Block ONLY if onboarded === true
- * - Must be re-run safe (refresh / retry / latency)
+ * - User must be authenticated
+ * - User must not be onboarded yet
+ * - Sets role to 'student' and onboarded to true
+ * - Creates student_profiles entry
  */
 const StudentOnboarding = () => {
   const navigate = useNavigate()
-  const { user, refreshProfile } = useAuth()
+  const { user, refreshProfile, profile } = useAuth()
   const { wallet } = useWallet()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [existingProfile, setExistingProfile] = useState<any>(null)
 
   const [formData, setFormData] = useState({
     displayName: '',
@@ -41,51 +41,25 @@ const StudentOnboarding = () => {
     'Other',
   ]
 
-  /**
-   * 🔍 Fetch profile ONCE
-   */
+  // Redirect if already onboarded
   useEffect(() => {
-    if (!user) return
-
-    const loadProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (error) {
-        console.error('Profile fetch failed:', error)
-        return
-      }
-
-      const profile = data as any
-
-      if (profile?.onboarded === true) {
-        navigate('/dashboard/student', { replace: true })
-        return
-      }
-
-      setExistingProfile(profile)
+    if (profile?.onboarded === true) {
+      navigate('/dashboard/student', { replace: true })
     }
-
-    loadProfile()
-  }, [user, navigate])
+  }, [profile, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 🔐 HARD SUBMIT LOCK
     if (isSubmitting) return
 
     if (!user) {
       toast.error('Please sign in first')
-      navigate('/auth/sign-in')
+      navigate('/auth/sign-up')
       return
     }
 
-    const walletAddress =
-      wallet.address || user.user_metadata?.wallet_address
+    const walletAddress = wallet.address || user.user_metadata?.wallet_address
 
     if (!walletAddress) {
       toast.error('Wallet address not found. Please reconnect your wallet.')
@@ -95,67 +69,42 @@ const StudentOnboarding = () => {
     setIsSubmitting(true)
 
     try {
-      /**
-       * 🚫 HARD BLOCK only if already onboarded
-       */
-      if (existingProfile?.onboarded === true) {
-        navigate('/dashboard/student', { replace: true })
-        return
+      // Step 1: Update/Insert profile with role and onboarded flag
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: user.id,
+          wallet_address: walletAddress.toLowerCase(),
+          role: 'student',
+          display_name: formData.displayName,
+          onboarded: true,
+        }, { onConflict: 'user_id' })
+
+      if (profileError) {
+        console.error('Profile upsert error:', profileError)
+        throw new Error('Failed to save profile')
       }
 
-      /**
-       * 🔁 UPDATE or INSERT (IDEMPOTENT)
-       */
-      if (existingProfile) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            role: 'student',
-            display_name: formData.displayName,
-            education_level: formData.educationLevel,
-            onboarded: true,
-          })
-          .eq('user_id', user.id)
-
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: user.id,
-            wallet_address: walletAddress.toLowerCase(),
-            role: 'student',
-            display_name: formData.displayName,
-            education_level: formData.educationLevel,
-            onboarded: true,
-          })
-          .select()
-          .single()
-
-        if (error) throw error
-
-        // 🔁 sync local state
-        setExistingProfile(data)
-      }
-
-      /**
-       * ✅ ROLE ASSIGN (SAFE)
-       */
+      // Step 2: Assign role in user_roles table
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
           { user_id: user.id, role: 'student' },
-          { onConflict: 'user_id,role', ignoreDuplicates: true }
+          { onConflict: 'user_id,role' }
         )
 
-      if (roleError) throw roleError
+      if (roleError) {
+        console.error('Role assignment error:', roleError)
+        throw new Error('Failed to assign role')
+      }
 
+      // Note: student_profiles table not in current schema - data stored in profiles table
       await refreshProfile()
       toast.success('Welcome to EduVerify!')
       navigate('/dashboard/student', { replace: true })
-    } catch (err) {
+    } catch (err: any) {
       console.error('Onboarding error:', err)
-      toast.error('Failed to complete onboarding. Please try again.')
+      toast.error(err.message || 'Failed to complete onboarding. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -201,6 +150,7 @@ const StudentOnboarding = () => {
                     setFormData({ ...formData, displayName: e.target.value })
                   }
                   className="input-glass"
+                  placeholder="Enter your full name"
                   required
                 />
               </div>
