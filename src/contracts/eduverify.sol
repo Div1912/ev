@@ -1,112 +1,72 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/* ============================
-   OpenZeppelin Imports
-============================ */
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-/* ============================
-   Academic Credential NFT
-============================ */
 contract AcademicCredentialNFT is ERC721, ERC721URIStorage, Ownable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIdCounter;
 
-    /* ============================
-       Certificate Structure
-    ============================ */
     struct Certificate {
         string studentName;
         string degree;
         string university;
+        string institutionId;
         bool exists;
     }
 
-    /* ============================
-       Storage
-    ============================ */
+    struct Issuer {
+        address issuerAddress;
+        string institutionId;
+        bool authorized;
+    }
+
     mapping(uint256 => Certificate) private certificates;
-
-    // Authorized institution wallets
-    mapping(address => bool) public authorizedIssuers;
-
+    mapping(address => Issuer) private issuerRegistry;
+    
     bool private contractPaused = false;
 
-    /* ============================
-       Events
-    ============================ */
-    event CertificateMinted(address indexed recipient, uint256 indexed tokenId);
-    event IssuerAdded(address indexed issuer);
+    event CertificateMinted(address indexed recipient, uint256 tokenId, string institutionId);
+    event IssuerAdded(address indexed issuer, string institutionId);
     event IssuerRemoved(address indexed issuer);
     event OwnershipUpdated(address indexed previousOwner, address indexed newOwner);
-    event EmergencyStopActivated(address indexed owner);
-    event EmergencyStopReleased(address indexed owner);
+    event EmergencyStopActivated(address owner);
 
-    /* ============================
-       Constructor
-    ============================ */
     constructor() ERC721("AcademicCredentialNFT", "ACNFT") Ownable(msg.sender) {}
 
-    /* ============================
-       Modifiers
-    ============================ */
     modifier whenNotPaused() {
         require(!contractPaused, "Contract is paused");
         _;
     }
 
-    modifier onlyIssuer() {
-        require(
-            msg.sender == owner() || authorizedIssuers[msg.sender],
-            "Not authorized issuer"
-        );
+    modifier onlyAuthorizedIssuer() {
+        require(issuerRegistry[msg.sender].authorized, "Not authorized issuer");
         _;
     }
 
-    /* ============================
-       Internal Helpers
-    ============================ */
     function _certificateExists(uint256 tokenId) internal view returns (bool) {
         return certificates[tokenId].exists;
     }
 
-    /* ============================
-       Issuer Management (ADMIN)
-    ============================ */
-    function addIssuer(address issuer) external onlyOwner {
-        require(issuer != address(0), "Invalid issuer address");
-        authorizedIssuers[issuer] = true;
-        emit IssuerAdded(issuer);
-    }
-
-    function removeIssuer(address issuer) external onlyOwner {
-        authorizedIssuers[issuer] = false;
-        emit IssuerRemoved(issuer);
-    }
-
-    /* ============================
-       Mint Certificate (CORE)
-    ============================ */
     function mintCertificate(
         address recipient,
         string memory studentName,
         string memory degree,
         string memory university,
-        string memory certificateURI
-    )
-        public
-        onlyIssuer
-        whenNotPaused
-    {
-        require(recipient != address(0), "Invalid recipient");
-        require(bytes(studentName).length > 0 && bytes(studentName).length <= 50, "Invalid student name");
+        string memory certificateURI,
+        string memory institutionId
+    ) public onlyAuthorizedIssuer whenNotPaused {
+        require(bytes(studentName).length <= 50, "Student name too long");
         require(bytes(degree).length > 0, "Degree cannot be empty");
         require(bytes(university).length > 0, "University cannot be empty");
-        require(bytes(certificateURI).length > 0, "URI required");
+        require(
+            keccak256(abi.encodePacked(issuerRegistry[msg.sender].institutionId)) == 
+            keccak256(abi.encodePacked(institutionId)),
+            "Issuer institution mismatch"
+        );
 
         uint256 tokenId = _tokenIdCounter.current();
         _tokenIdCounter.increment();
@@ -114,78 +74,55 @@ contract AcademicCredentialNFT is ERC721, ERC721URIStorage, Ownable {
         _safeMint(recipient, tokenId);
         _setTokenURI(tokenId, certificateURI);
 
-        certificates[tokenId] = Certificate({
-            studentName: studentName,
-            degree: degree,
-            university: university,
-            exists: true
-        });
-
-        emit CertificateMinted(recipient, tokenId);
+        certificates[tokenId] = Certificate(studentName, degree, university, institutionId, true);
+        emit CertificateMinted(recipient, tokenId, institutionId);
     }
-// Accept ETH transfers (optional, future-proof)
-receive() external payable {}
 
-fallback() external payable {}
+    function addIssuer(address issuerAddress, string memory institutionId) public onlyOwner {
+        require(issuerAddress != address(0), "Invalid issuer address");
+        require(bytes(institutionId).length > 0, "Institution ID cannot be empty");
+        
+        issuerRegistry[issuerAddress] = Issuer(issuerAddress, institutionId, true);
+        emit IssuerAdded(issuerAddress, institutionId);
+    }
 
-    /* ============================
-       Admin-Only Certificate Data
-    ============================ */
+    function removeIssuer(address issuerAddress) public onlyOwner {
+        require(issuerRegistry[issuerAddress].authorized, "Issuer not found");
+        issuerRegistry[issuerAddress].authorized = false;
+        emit IssuerRemoved(issuerAddress);
+    }
+
+    function isAuthorizedIssuer(address issuerAddress) public view returns (bool) {
+        return issuerRegistry[issuerAddress].authorized;
+    }
+
+    function getIssuerInfo(address issuerAddress) public view returns (Issuer memory) {
+        return issuerRegistry[issuerAddress];
+    }
+
     function getCertificateDetails(uint256 tokenId)
-        public
-        view
-        whenNotPaused
-        returns (
-            string memory studentName,
-            string memory degree,
-            string memory university,
-            string memory uri
-        )
+        public view whenNotPaused
+        returns (string memory studentName, string memory degree, string memory university, string memory ipfsHash, string memory institutionId)
     {
         require(_certificateExists(tokenId), "Certificate does not exist");
-        require(msg.sender == owner(), "Admin only");
-
+        require(msg.sender == owner(), "Only the contract's owner can access this data");
         Certificate memory cert = certificates[tokenId];
-        return (
-            cert.studentName,
-            cert.degree,
-            cert.university,
-            tokenURI(tokenId)
-        );
+        return (cert.studentName, cert.degree, cert.university, tokenURI(tokenId), cert.institutionId);
     }
 
-    /* ============================
-       Public Verification (SAFE)
-    ============================ */
     function verifyCertificate(uint256 tokenId)
-        public
-        view
-        returns (
-            string memory studentName,
-            string memory degree,
-            string memory university,
-            string memory uri
-        )
+        public view
+        returns (string memory studentName, string memory degree, string memory university, string memory ipfsHash, string memory institutionId)
     {
         require(_certificateExists(tokenId), "Certificate does not exist");
-
         Certificate memory cert = certificates[tokenId];
-        return (
-            cert.studentName,
-            cert.degree,
-            cert.university,
-            tokenURI(tokenId)
-        );
+        return (cert.studentName, cert.degree, cert.university, tokenURI(tokenId), cert.institutionId);
     }
 
-    /* ============================
-       Admin Controls
-    ============================ */
     function updateOwner(address newOwner) public onlyOwner {
         require(newOwner != address(0), "Invalid address");
-        address oldOwner = owner();
         transferOwnership(newOwner);
-        emit OwnershipUpdated(oldOwner, newOwner);
+        emit OwnershipUpdated(msg.sender, newOwner);
     }
 
     function emergencyStop() public onlyOwner {
@@ -195,27 +132,13 @@ fallback() external payable {}
 
     function resumeContract() public onlyOwner {
         contractPaused = false;
-        emit EmergencyStopReleased(msg.sender);
     }
 
-    /* ============================
-       Overrides
-    ============================ */
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override(ERC721, ERC721URIStorage)
-        returns (string memory)
-    {
+    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
         return super.tokenURI(tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, ERC721URIStorage)
-        returns (bool)
-    {
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 }
