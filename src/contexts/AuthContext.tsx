@@ -23,7 +23,6 @@ interface Profile {
   display_name: string | null
   institution: string | null
   role: string | null
-  onboarded?: boolean | null
   [key: string]: unknown
 }
 
@@ -200,7 +199,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const hasRole = (role: UserRole) => roles.includes(role)
-  const isOnboarded = profileLoaded && profile?.onboarded === true
+  
+  // User is onboarded if they have at least one valid role (not 'pending')
+  const isOnboarded = profileLoaded && roles.length > 0
 
   return (
     <AuthContext.Provider

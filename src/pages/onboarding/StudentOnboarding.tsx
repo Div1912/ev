@@ -16,13 +16,12 @@ import BackButton from '@/components/BackButton'
  *
  * Rules:
  * - User must be authenticated
- * - User must not be onboarded yet
- * - Sets role to 'student' and onboarded to true
- * - Creates student_profiles entry
+ * - User must not have a role yet (role = 'pending' or no user_roles entry)
+ * - Sets role to 'student' in both profiles and user_roles
  */
 const StudentOnboarding = () => {
   const navigate = useNavigate()
-  const { user, refreshProfile, profile } = useAuth()
+  const { user, refreshProfile, roles } = useAuth()
   const { wallet } = useWallet()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -41,12 +40,12 @@ const StudentOnboarding = () => {
     'Other',
   ]
 
-  // Redirect if already onboarded
+  // Redirect if already has a valid role (not pending)
   useEffect(() => {
-    if (profile?.onboarded === true) {
+    if (roles.includes('student')) {
       navigate('/dashboard/student', { replace: true })
     }
-  }, [profile, navigate])
+  }, [roles, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,23 +68,21 @@ const StudentOnboarding = () => {
     setIsSubmitting(true)
 
     try {
-      // Step 1: Update/Insert profile with role and onboarded flag
+      // Step 1: Update profile with role (using existing schema columns only)
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
-          wallet_address: walletAddress.toLowerCase(),
+        .update({
           role: 'student',
           display_name: formData.displayName,
-          onboarded: true,
-        }, { onConflict: 'user_id' })
+        })
+        .eq('user_id', user.id)
 
       if (profileError) {
-        console.error('Profile upsert error:', profileError)
-        throw new Error('Failed to save profile')
+        console.error('Profile update error:', profileError)
+        throw new Error(`Failed to save profile: ${profileError.message}`)
       }
 
-      // Step 2: Assign role in user_roles table
+      // Step 2: Assign role in user_roles table (the authoritative source for roles)
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert(
@@ -95,10 +92,9 @@ const StudentOnboarding = () => {
 
       if (roleError) {
         console.error('Role assignment error:', roleError)
-        throw new Error('Failed to assign role')
+        throw new Error(`Failed to assign role: ${roleError.message}`)
       }
 
-      // Note: student_profiles table not in current schema - data stored in profiles table
       await refreshProfile()
       toast.success('Welcome to EduVerify!')
       navigate('/dashboard/student', { replace: true })

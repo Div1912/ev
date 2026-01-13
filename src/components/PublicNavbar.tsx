@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, GraduationCap } from 'lucide-react';
+import { Menu, X, GraduationCap, LogIn, UserPlus } from 'lucide-react';
 
 const PublicNavbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -69,10 +69,21 @@ const PublicNavbar = () => {
             ))}
           </div>
 
-          {/* Desktop CTA */}
-          <div className="hidden md:flex items-center">
-            <Link to="/auth/sign-in" className="btn-primary">
-              Sign In
+          {/* Desktop CTA - TWO BUTTONS: Log In and Sign Up */}
+          <div className="hidden md:flex items-center gap-3">
+            <Link 
+              to="/auth/sign-in" 
+              className="btn-secondary flex items-center gap-2"
+            >
+              <LogIn className="w-4 h-4" />
+              Log In
+            </Link>
+            <Link 
+              to="/auth/sign-up" 
+              className="btn-primary flex items-center gap-2"
+            >
+              <UserPlus className="w-4 h-4" />
+              Sign Up
             </Link>
           </div>
 
@@ -116,13 +127,23 @@ const PublicNavbar = () => {
                   </Link>
                 )
               ))}
-              <div className="pt-4 border-t border-white/10">
+              {/* Mobile - TWO BUTTONS: Log In and Sign Up */}
+              <div className="pt-4 border-t border-white/10 space-y-3">
                 <Link 
                   to="/auth/sign-in" 
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="w-full btn-primary block text-center"
+                  className="w-full btn-secondary flex items-center justify-center gap-2"
                 >
-                  Sign In
+                  <LogIn className="w-4 h-4" />
+                  Log In
+                </Link>
+                <Link 
+                  to="/auth/sign-up" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-full btn-primary flex items-center justify-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Sign Up
                 </Link>
               </div>
             </div>

@@ -43,6 +43,7 @@ import AdminSettings from "./pages/admin/Settings"
 import RoleManagement from "./pages/admin/RoleManagement"
 
 import NotFound from "./pages/NotFound"
+import Unauthorized from "./pages/Unauthorized"
 
 const queryClient = new QueryClient()
 
@@ -265,6 +266,11 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+
+                {/* --------------------------------------------------
+                 * UNAUTHORIZED
+                 * -------------------------------------------------- */}
+                <Route path="/unauthorized" element={<Unauthorized />} />
 
                 {/* --------------------------------------------------
                  * 404
