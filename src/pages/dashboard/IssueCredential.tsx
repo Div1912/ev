@@ -178,6 +178,7 @@ const IssueCredentialPage = () => {
           formData.degree.trim(),
           institution,
           metadataUri,
+          institution, // institutionId - using institution name as the ID
         )
 
         tokenId = mintResult.tokenId
