@@ -115,7 +115,7 @@ export const CONTRACT_ABI = [
 ];
 
 // Contract address on Flow EVM Testnet
-export const CONTRACT_ADDRESS = "0x3CD26d8d57f0e1d9143153ba7DbC27f372229682";
+export const CONTRACT_ADDRESS = "0xA9f203c5C143630B1284Bd7CeB32faba0D3a7413";
 
 // Flow EVM Testnet chain configuration
 export const FLOW_EVM_TESTNET = {
