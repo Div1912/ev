@@ -191,7 +191,7 @@ if (!institutionConfigured || !issuingInstitution) {
           student_wallet: formData.studentWallet.toLowerCase().trim(),
           degree: formData.degree.trim(),
           university: institution,
-          issued_by: profile.id,
+          issued_by: user.id,
           status: 'verified',
           issued_at: new Date().toISOString(),
           token_id: tokenId,
