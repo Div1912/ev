@@ -331,11 +331,26 @@ export const mintCertificate = async (
   certificateURI: string,
   institutionId: string,
 ): Promise<string> => {
-  const contract = await getContract(true)
-  const tx = await contract.mintCertificate(recipient, studentName, degree, university, certificateURI, institutionId)
+  try {
+    const contract = await getContract(true)
+    console.log("[v0] Calling mintCertificate on contract:", CONTRACT_ADDRESS)
+    console.log("[v0] Params:", { recipient, studentName, degree, university, certificateURI, institutionId })
 
-  await tx.wait()
-  return tx.hash
+    const tx = await contract.mintCertificate(recipient, studentName, degree, university, certificateURI, institutionId)
+    console.log("[v0] Transaction sent:", tx.hash)
+
+    const receipt = await tx.wait()
+    console.log("[v0] Transaction confirmed:", receipt?.hash)
+
+    if (!receipt) {
+      throw new Error("Transaction failed - no receipt received")
+    }
+
+    return tx.hash
+  } catch (error: any) {
+    console.error("[v0] mintCertificate error:", error)
+    throw new Error(error.message || "Failed to mint certificate")
+  }
 }
 
 export const emergencyStop = async (): Promise<string> => {
