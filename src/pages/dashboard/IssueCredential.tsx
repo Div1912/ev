@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -48,6 +48,9 @@ interface IssuedCredential {
 const IssueCredentialPage = () => {
   const navigate = useNavigate();
   const { profile, user } = useAuth();
+  const [issuingInstitution, setIssuingInstitution] = useState<string | null>(null);
+  const [institutionConfigured, setInstitutionConfigured] = useState(false);
+  const [institutionLoading, setInstitutionLoading] = useState(true);
   const { wallet } = useWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [issuedCredential, setIssuedCredential] = useState<IssuedCredential | null>(null);
@@ -66,6 +69,30 @@ const IssueCredentialPage = () => {
     major: '',
     graduationDate: '',
   });
+useEffect(() => {
+  if (!user) {
+    setInstitutionLoading(false);
+    return;
+  }
+
+  const loadInstitution = async () => {
+    const { data } = await supabase
+      .from('institutions')
+      .select('name, configured')
+      .eq('user_id', user.id)
+      .single();
+
+    if (data?.configured) {
+      setIssuingInstitution(data.name);
+      setInstitutionConfigured(true);
+    }
+
+    setInstitutionLoading(false);
+  };
+
+  loadInstitution();
+}, [user]);
+
 
   const validateForm = () => {
     try {
@@ -98,12 +125,18 @@ const IssueCredentialPage = () => {
       toast.error('Please sign in first');
       return;
     }
+if (!institutionConfigured || !issuingInstitution) {
+  toast.error('Institution not configured');
+  return;
+}
+
 
     setIsSubmitting(true);
     setMintProgress({ stage: 'preparing', percent: 10, message: 'Preparing credential...' });
 
     try {
-      const institution = profile.institution || 'Unknown Institution';
+      const institution = issuingInstitution!;
+
       let tokenId: number;
       let txHash: string;
 
@@ -440,7 +473,7 @@ const IssueCredentialPage = () => {
               {/* Institution Info (Read Only) */}
               <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
                 <p className="text-sm text-muted-foreground mb-1">Issuing Institution</p>
-                <p className="font-medium">{profile?.institution || 'Not configured'}</p>
+                <p className="font-medium">{issuingInstitution ?? 'Not configured'}</p>
               </div>
 
               {/* Minting Progress */}
@@ -453,7 +486,7 @@ const IssueCredentialPage = () => {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || institutionLoading || !institutionConfigured}
                 className="w-full btn-primary py-4"
               >
                 {isSubmitting ? (
