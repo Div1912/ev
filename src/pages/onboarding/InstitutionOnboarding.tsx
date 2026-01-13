@@ -16,13 +16,12 @@ import BackButton from '@/components/BackButton'
  *
  * Rules:
  * - User must be authenticated
- * - User must not be onboarded yet
- * - Sets role to 'issuer' and onboarded to true
- * - Creates institution_profiles entry
+ * - User must not have a role yet
+ * - Sets role to 'issuer' in both profiles and user_roles
  */
 const InstitutionOnboarding = () => {
   const navigate = useNavigate()
-  const { user, refreshProfile, profile } = useAuth()
+  const { user, refreshProfile, roles } = useAuth()
   const { wallet } = useWallet()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -42,12 +41,12 @@ const InstitutionOnboarding = () => {
     'Other',
   ]
 
-  // Redirect if already onboarded
+  // Redirect if already has issuer role
   useEffect(() => {
-    if (profile?.onboarded === true) {
+    if (roles.includes('issuer')) {
       navigate('/dashboard/institution', { replace: true })
     }
-  }, [profile, navigate])
+  }, [roles, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,21 +69,19 @@ const InstitutionOnboarding = () => {
     setIsSubmitting(true)
 
     try {
-      // Step 1: Update/Insert profile with role and onboarded flag
+      // Step 1: Update profile with role and institution info
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
-          wallet_address: walletAddress.toLowerCase(),
+        .update({
           role: 'issuer',
           display_name: formData.displayName,
           institution: formData.institutionName,
-          onboarded: true,
-        }, { onConflict: 'user_id' })
+        })
+        .eq('user_id', user.id)
 
       if (profileError) {
-        console.error('Profile upsert error:', profileError)
-        throw new Error('Failed to save profile')
+        console.error('Profile update error:', profileError)
+        throw new Error(`Failed to save profile: ${profileError.message}`)
       }
 
       // Step 2: Assign role in user_roles table
@@ -97,7 +94,7 @@ const InstitutionOnboarding = () => {
 
       if (roleError) {
         console.error('Role assignment error:', roleError)
-        throw new Error('Failed to assign role')
+        throw new Error(`Failed to assign role: ${roleError.message}`)
       }
 
       await refreshProfile()

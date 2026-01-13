@@ -31,7 +31,7 @@ const ProtectedRoute = ({
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -49,7 +49,7 @@ const ProtectedRoute = ({
   if (user && !profileLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -68,14 +68,28 @@ const ProtectedRoute = ({
    * BLOCK ONBOARDING AFTER COMPLETION
    * -------------------------------------------------- */
   if (user && isOnboarded && path.startsWith("/onboarding")) {
-    return <Navigate to={`/dashboard/${roles[0]}`} replace />
+    // Redirect to the appropriate dashboard based on role
+    const roleDashboards: Record<string, string> = {
+      student: '/dashboard/student',
+      issuer: '/dashboard/institution',
+      verifier: '/dashboard/verifier',
+      admin: '/dashboard/admin',
+    }
+    const primaryRole = roles[0]
+    const targetDashboard = roleDashboards[primaryRole] || '/dashboard/student'
+    return <Navigate to={targetDashboard} replace />
   }
 
   /* --------------------------------------------------
-   * ROLE AUTHORIZATION
+   * ROLE AUTHORIZATION - Redirect to /unauthorized
    * -------------------------------------------------- */
   if (requiredRole && !hasRole(requiredRole)) {
-    return <Navigate to={`/dashboard/${roles[0]}`} replace />
+    // If user has no roles, send to onboarding
+    if (roles.length === 0) {
+      return <Navigate to="/onboarding/select-role" replace />
+    }
+    // Otherwise, redirect to unauthorized page
+    return <Navigate to="/unauthorized" replace />
   }
 
   /* --------------------------------------------------

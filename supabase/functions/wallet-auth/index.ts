@@ -15,7 +15,7 @@ interface VerifyRequest {
   wallet_address: string;
   signature: string;
   message: string;
-  mode?: 'signup' | 'login'; // Explicit mode for signup vs login
+  mode?: 'signup' | 'login';
 }
 
 // Validate Ethereum address format
@@ -33,7 +33,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    // Service role is required to manage Auth users + bypass RLS for profile/roles creation.
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const url = new URL(req.url);
@@ -48,7 +47,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
 
-    // Backward-compatible endpoint: returns the fixed message (no nonce, no dynamic text)
+    // Backward-compatible endpoint: returns the fixed message
     if (action === 'nonce' || action === 'wallet-auth') {
       const { wallet_address } = body;
 
@@ -78,7 +77,6 @@ Deno.serve(async (req) => {
 
       const normalizedAddress = wallet_address.toLowerCase();
 
-      // Check if profile exists with this wallet
       const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
         .select('id, user_id, role, onboarded')
@@ -114,7 +112,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Ensure deterministic, identical message (prevents newline/punctuation/space mismatches)
       if (message !== SIGN_MESSAGE) {
         return new Response(JSON.stringify({ error: FRIENDLY_VERIFY_ERROR }), {
           status: 401,
@@ -124,7 +121,6 @@ Deno.serve(async (req) => {
 
       const normalizedAddress = wallet_address.toLowerCase();
 
-      // Recover address via ethers.verifyMessage(message, signature)
       let recoveredAddress: string;
       try {
         recoveredAddress = ethers.verifyMessage(message, signature).toLowerCase();
@@ -143,10 +139,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Deterministic email identity for this wallet.
       const email = `${normalizedAddress}@wallet.eduverify.local`;
 
-      // Try to locate an existing profile by wallet address
       const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
         .select('id, user_id, role, onboarded')
@@ -161,13 +155,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      let userId: string;
-      let userEmail: string = email;
+      // Initialize with defaults - will be set in both branches
+      let userId = '';
+      let userEmail = email;
       let isNewUser = false;
 
       // ===== LOGIN MODE =====
       if (mode === 'login') {
-        // For login, user MUST already exist
         if (!existingProfile?.user_id) {
           return new Response(JSON.stringify({ 
             error: 'No account found with this wallet. Please sign up first.',
@@ -193,7 +187,6 @@ Deno.serve(async (req) => {
       }
       // ===== SIGNUP MODE =====
       else if (mode === 'signup') {
-        // For signup, user must NOT already exist
         if (existingProfile?.user_id) {
           return new Response(JSON.stringify({ 
             error: 'An account already exists with this wallet. Please log in instead.',
@@ -204,7 +197,6 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Create new Auth user
         const { data: newUserData, error: createError } = await supabase.auth.admin.createUser({
           email,
           email_confirm: true,
@@ -225,33 +217,32 @@ Deno.serve(async (req) => {
         userEmail = newUserData.user.email ?? email;
         isNewUser = true;
 
-        // Create minimal profile (NO role assignment - that happens during onboarding)
-        // DO NOT set role here - user must select role during onboarding
+        // Create minimal profile - NO role assignment here (happens during onboarding)
         if (existingProfile) {
-          // Link existing orphan profile to user
           await supabase
             .from('profiles')
             .update({ user_id: userId })
             .eq('id', existingProfile.id);
         } else {
-          // Create new profile without role - role is set during onboarding
           const { error: profileInsertError } = await supabase.from('profiles').insert({
             user_id: userId,
             wallet_address: normalizedAddress,
-            role: 'pending', // Placeholder - will be updated during onboarding
+            role: 'pending',
             onboarded: false,
           });
           
           if (profileInsertError) {
             console.error('Failed to create profile:', profileInsertError);
-            // Don't fail the whole request - user can still complete onboarding
           }
         }
-
-        // DO NOT insert user_roles here - that happens during onboarding
+      } else {
+        return new Response(JSON.stringify({ error: 'Invalid mode' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      // Generate a magic link token for client-side session establishment.
+      // Generate magic link token
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type: 'magiclink',
         email: userEmail,
