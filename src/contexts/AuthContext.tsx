@@ -1,15 +1,18 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { loginWithWallet, signUpWithWallet } from "@/lib/walletAuth"
 import type { User, Session } from "@supabase/supabase-js"
 
 export type UserRole = "student" | "issuer" | "verifier" | "admin"
 
-/**
- * App-facing profile shape.
- */
 interface Profile {
   id: string
   user_id: string
@@ -17,27 +20,31 @@ interface Profile {
   display_name: string | null
   institution: string | null
   role: string | null
+  onboarded?: boolean
   [key: string]: unknown
 }
+
+type ProfileStatus = "idle" | "loading" | "loaded" | "missing" | "error"
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   profile: Profile | null
   roles: UserRole[]
+  profileStatus: ProfileStatus
   isLoading: boolean
-  profileLoaded: boolean
-  isOnboarded: boolean
   isAuthenticating: boolean
   error: string | null
-  // Separate signup and login functions
+
+  // auth actions
   signUpWallet: (walletAddress: string) => Promise<{ isNewUser: boolean }>
   loginWallet: (walletAddress: string) => Promise<void>
-  // Legacy function for backwards compatibility
-  authenticateWallet: (walletAddress: string) => Promise<void>
-  refreshProfile: () => Promise<void>
-  hasRole: (role: UserRole) => boolean
   signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
+
+  // helpers
+  hasRole: (role: UserRole) => boolean
+  isOnboarded: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -49,99 +56,99 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [roles, setRoles] = useState<UserRole[]>([])
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [profileLoaded, setProfileLoaded] = useState(false)
+  const [profileStatus, setProfileStatus] =
+    useState<ProfileStatus>("idle")
 
+  const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  /* ---------------- PROFILE ---------------- */
+  /* ---------------- PROFILE FETCH ---------------- */
 
   const refreshProfile = async () => {
     if (!user) {
       setProfile(null)
       setRoles([])
-      setProfileLoaded(true)
+      setProfileStatus("idle")
       return
     }
 
-    setProfileLoaded(false)
+    setProfileStatus("loading")
 
     try {
-      const { data: profileData, error: profileError } = await supabase.auth.getSession()
-      if (!profileData.session?.user) {
-        throw new Error("No active session")
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.user) {
+        setProfile(null)
+        setRoles([])
+        setProfileStatus("missing")
+        return
       }
 
-      const userId = profileData.session.user.id
+      const userId = session.user.id
 
-      const [{ data: userRolesData, error: rolesError }] = await Promise.all([
+      const [rolesRes, profileRes] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", userId),
+        supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       ])
 
-      if (rolesError) throw rolesError
+      if (rolesRes.error) throw rolesRes.error
+      if (profileRes.error) throw profileRes.error
 
-      const { data: fetchedProfile, error: fetchProfileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle()
+      setRoles((rolesRes.data ?? []).map((r) => r.role as UserRole))
 
-      if (fetchProfileError) throw fetchProfileError
-
-      const validProfile = fetchedProfile && fetchedProfile.user_id ? (fetchedProfile as unknown as Profile) : null
-      setProfile(validProfile)
-      setRoles((userRolesData ?? []).map((r) => r.role as UserRole))
+      if (!profileRes.data) {
+        setProfile(null)
+        setProfileStatus("missing")
+      } else {
+        setProfile(profileRes.data as Profile)
+        setProfileStatus("loaded")
+      }
     } catch (e) {
-      console.error("refreshProfile failed:", e)
+      console.error("refreshProfile error:", e)
       setProfile(null)
       setRoles([])
-    } finally {
-      setProfileLoaded(true)
+      setProfileStatus("error")
     }
   }
 
-  /* ---------------- SIGNUP (NEW USERS ONLY) ---------------- */
+  /* ---------------- SIGNUP ---------------- */
 
-  const signUpWallet = async (walletAddress: string): Promise<{ isNewUser: boolean }> => {
+  const signUpWallet = async (walletAddress: string) => {
     if (!walletAddress) throw new Error("Wallet address missing")
 
     setError(null)
     setIsAuthenticating(true)
+
     try {
       const result = await signUpWithWallet(walletAddress)
       return { isNewUser: result.isNewUser }
     } catch (e: any) {
-      const message = e?.message || "Sign up failed"
-      setError(message)
+      setError(e?.message || "Sign up failed")
       throw e
     } finally {
       setIsAuthenticating(false)
     }
   }
 
-  /* ---------------- LOGIN (EXISTING USERS ONLY) ---------------- */
+  /* ---------------- LOGIN ---------------- */
 
-  const loginWallet = async (walletAddress: string): Promise<void> => {
+  const loginWallet = async (walletAddress: string) => {
     if (!walletAddress) throw new Error("Wallet address missing")
 
     setError(null)
     setIsAuthenticating(true)
+
     try {
       await loginWithWallet(walletAddress)
     } catch (e: any) {
-      const message = e?.message || "Login failed"
-      setError(message)
+      setError(e?.message || "Login failed")
       throw e
     } finally {
       setIsAuthenticating(false)
     }
-  }
-
-  /* ---------------- LEGACY AUTH (for backwards compat) ---------------- */
-
-  const authenticateWallet = async (walletAddress: string) => {
-    return loginWallet(walletAddress)
   }
 
   /* ---------------- AUTH BOOTSTRAP ---------------- */
@@ -160,14 +167,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null)
       setIsLoading(false)
 
-      if (!session?.user) {
-        setProfileLoaded(true)
+      if (session?.user) {
+        refreshProfile()
+      } else {
+        setProfileStatus("idle")
       }
     }
 
     init()
 
-    const { data } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return
 
       setSession(session)
@@ -176,9 +185,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!session?.user) {
         setProfile(null)
         setRoles([])
-        setProfileLoaded(true)
+        setProfileStatus("idle")
       } else {
-        setProfileLoaded(false)
+        refreshProfile()
       }
     })
 
@@ -188,12 +197,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [])
 
-  useEffect(() => {
-    if (!isLoading && user && !profileLoaded) {
-      refreshProfile()
-    }
-  }, [user, isLoading, profileLoaded])
-
   /* ---------------- HELPERS ---------------- */
 
   const signOut = async () => {
@@ -202,13 +205,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setSession(null)
     setProfile(null)
     setRoles([])
-    setProfileLoaded(true)
+    setProfileStatus("idle")
   }
 
   const hasRole = (role: UserRole) => roles.includes(role)
 
-  // User is onboarded if they have at least one valid role (not 'pending')
-  const isOnboarded = profileLoaded && roles.length > 0
+  const isOnboarded =
+    profileStatus === "loaded" &&
+    profile?.onboarded === true &&
+    roles.length > 0
 
   return (
     <AuthContext.Provider
@@ -217,17 +222,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         profile,
         roles,
+        profileStatus,
         isLoading,
-        profileLoaded,
-        isOnboarded,
         isAuthenticating,
         error,
         signUpWallet,
         loginWallet,
-        authenticateWallet,
+        signOut,
         refreshProfile,
         hasRole,
-        signOut,
+        isOnboarded,
       }}
     >
       {children}
