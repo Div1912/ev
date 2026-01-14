@@ -9,41 +9,20 @@ import BackButton from '@/components/BackButton';
 
 /**
  * SIGN UP PAGE - For NEW USERS ONLY
- * 
- * Flow:
- * 1. Connect wallet
- * 2. Sign message
- * 3. Create new account (fails if wallet already exists)
- * 4. Redirect to role selection
  */
 const SignUpPage = () => {
   const navigate = useNavigate();
   const { wallet, connect, disconnect, isConnecting, error: walletError, isMetaMaskAvailable } = useWallet();
-  const { user, profile, roles, isAuthenticating, signUpWallet, error: authError, isLoading, profileLoaded } = useAuth();
+  const { user, isAuthenticating, signUpWallet, error: authError, isLoading } = useAuth();
   const [showMetaMaskWarning, setShowMetaMaskWarning] = useState(false);
   const [authStep, setAuthStep] = useState<'connect' | 'sign' | 'complete'>('connect');
 
-  // Redirect authenticated users
+  // 🔒 FIX: Block signup if auth user already exists (Single Source of Truth for Redirect)
   useEffect(() => {
-    if (!isLoading && !profileLoaded) return;
-    
-    if (user) {
-      // If already onboarded with roles, go to dashboard
-      if (profile?.onboarded && roles.length > 0) {
-        const primaryRole = roles[0];
-        const dashboardPaths: Record<string, string> = {
-          student: '/dashboard/student',
-          issuer: '/dashboard/institution',
-          verifier: '/dashboard/verifier',
-          admin: '/dashboard/admin',
-        };
-        navigate(dashboardPaths[primaryRole] || '/dashboard/student', { replace: true });
-      } else {
-        // New user - needs role selection
-        navigate('/onboarding/select-role', { replace: true });
-      }
+    if (!isLoading && user) {
+      navigate('/onboarding/select-role', { replace: true });
     }
-  }, [user, profile, roles, isLoading, profileLoaded, navigate]);
+  }, [user, isLoading, navigate]);
 
   // Update step when wallet connects
   useEffect(() => {
@@ -66,15 +45,14 @@ const SignUpPage = () => {
   };
 
   const handleSignUp = async () => {
-    if (!wallet.address) return;
-    
+    if (!wallet.address || user) return; // 🔒 FIX: Prevent redundant signups
+
     try {
-      await signUpWallet(wallet.address);
+      // 🔧 Normalize address to lowercase
+      await signUpWallet(wallet.address.toLowerCase());
       setAuthStep('complete');
-      // Redirect will be handled by useEffect
     } catch (err) {
       console.error('Sign up failed:', err);
-      // Error is already set in context
     }
   };
 
