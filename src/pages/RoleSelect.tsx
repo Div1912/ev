@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Building2, Search, ArrowRight, Loader2 } from 'lucide-react';
@@ -9,36 +9,18 @@ import BackButton from '@/components/BackButton';
 
 const RoleSelectPage = () => {
   const navigate = useNavigate();
-  const { user, roles, profileStatus, isLoading, refreshProfile } = useAuth();
+  const { user, isLoading, refreshProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Redirect if user already has a role assigned - ensures they don't see this page again
-  useEffect(() => {
-    if (!isLoading && profileStatus === 'loaded' && user && roles.length > 0) {
-      const primaryRole = roles[0];
-      const dashboardPaths: Record<UserRole, string> = {
-        student: '/student/dashboard',
-        issuer: '/issuer/dashboard',
-        verifier: '/verify',
-        admin: '/admin/dashboard',
-      };
-      navigate(dashboardPaths[primaryRole], { replace: true });
-    }
-  }, [user, roles, profileStatus, isLoading, navigate]);
-
-  // 2. If not authenticated, redirect to login
-  useEffect(() => {
-    if (!isLoading && !user) {
-      navigate('/login', { replace: true });
-    }
-  }, [user, isLoading, navigate]);
+  // ✅ FIX: Redundant dashboard redirect useEffect removed. 
+  // ProtectedRoute now handles all role-based and onboarding redirects.
 
   const handleRoleClick = async (roleId: UserRole, path: string) => {
     if (!user) return;
     
     setIsSubmitting(true);
     try {
-      // ✅ FIX: Use upsert for roles to prevent duplicate key errors on double-clicks
+      // 1. Database Writes
       const { error: roleErr } = await supabase
         .from('user_roles')
         .upsert(
@@ -48,7 +30,6 @@ const RoleSelectPage = () => {
       
       if (roleErr) throw roleErr;
 
-      // ✅ FIX: Initialize/Update the profile record
       const { error: profileErr } = await supabase
         .from('profiles')
         .upsert({ 
@@ -59,14 +40,17 @@ const RoleSelectPage = () => {
 
       if (profileErr) throw profileErr;
 
-      // 3. Refresh the AuthContext so the app knows the user now has a role
-      await refreshProfile();
+      // ✅ FIX: Navigate BEFORE refreshing context to clear the guard race condition
+      navigate(path, { replace: true });
 
-      // 4. Navigate to the specific onboarding form for that role
-      navigate(path);
+      // ✅ FIX: Non-blocking refresh to update state after URL has changed
+      setTimeout(() => {
+        refreshProfile();
+        setIsSubmitting(false); // Safety: re-enable UI after transition background task
+      }, 0);
+
     } catch (err) {
       console.error("Error saving role:", err);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -98,9 +82,6 @@ const RoleSelectPage = () => {
     },
   ];
 
-  // ✅ FIX: Corrected Spinner Guard
-  // isLoading must be handled by the AuthContext fix we applied earlier.
-  // This page will render once isLoading is false and profileStatus is either 'missing' (new user) or 'loaded'.
   if (isLoading || isSubmitting) {
     return (
       <div className="min-h-screen flex items-center justify-center">
