@@ -18,6 +18,7 @@ const ProtectedRoute = ({
     isLoading,
     profileStatus,
     isOnboarded,
+    hasSelectedRole,
     roles,
     hasRole,
   } = useAuth()
@@ -47,19 +48,33 @@ const ProtectedRoute = ({
   }
 
   /**
-   * 3. ONBOARDING ENFORCEMENT
-   * If the profile is 'missing' (new user) or onboarding is incomplete,
-   * they MUST be on an onboarding route.
+   * 3. ROLE SELECTION ENFORCEMENT
+   * If the user is logged in but has NOT picked a role yet (new account),
+   * they MUST be on the role selection page.
    */
-  if (user && (profileStatus === 'missing' || !isOnboarded)) {
-    if (!path.startsWith("/onboarding")) {
+  if (user && !hasSelectedRole) {
+    if (!path.startsWith("/onboarding/select-role")) {
       return <Navigate to="/onboarding/select-role" replace />
     }
     return <>{children}</>
   }
 
   /**
-   * 4. BLOCK ONBOARDING AFTER COMPLETION
+   * 4. ONBOARDING COMPLETION ENFORCEMENT
+   * If the user has picked a role but hasn't finished the detail form (isOnboarded is false),
+   * they are allowed to be on onboarding sub-pages (e.g., /onboarding/student).
+   */
+  if (user && !isOnboarded) {
+    if (!path.startsWith("/onboarding")) {
+      // Safety: Send them back to their chosen role's onboarding sub-page
+      const primaryRole = roles[0];
+      return <Navigate to={`/onboarding/${primaryRole}`} replace />
+    }
+    return <>{children}</>
+  }
+
+  /**
+   * 5. BLOCK ONBOARDING AFTER COMPLETION
    * Stop fully onboarded users from accessing setup pages.
    */
   if (user && isOnboarded && path.startsWith("/onboarding")) {
@@ -75,12 +90,12 @@ const ProtectedRoute = ({
   }
 
   /**
-   * 5. ROLE AUTHORIZATION
+   * 6. ROLE AUTHORIZATION (SAFE)
+   * ✅ FIX: Only enforce role checks AFTER onboarding is complete.
+   * This prevents race conditions where the 'roles' array might be 
+   * empty during the final transition to the dashboard.
    */
-  if (requiredRole && !hasRole(requiredRole)) {
-    if (roles.length === 0) {
-      return <Navigate to="/onboarding/select-role" replace />
-    }
+  if (requiredRole && isOnboarded && !hasRole(requiredRole)) {
     return <Navigate to="/unauthorized" replace />
   }
 
