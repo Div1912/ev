@@ -18,6 +18,7 @@ import {
   CheckCircle,
   Copy,
   ExternalLink,
+  ImageIcon,
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWallet } from "@/contexts/WalletContext"
@@ -25,7 +26,7 @@ import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import DashboardNavbar from "@/components/DashboardNavbar"
 import { z } from "zod"
-import { mintCertificate, switchToFlowTestnet, FLOW_EVM_TESTNET } from "@/lib/web3"
+import { mintCertificate, switchToFlowTestnet, FLOW_EVM_TESTNET, getStudentNameByWallet } from "@/lib/web3"
 import { Progress } from "@/components/ui/progress"
 
 const credentialSchema = z.object({
@@ -42,6 +43,8 @@ const credentialSchema = z.object({
   degree: z.string().trim().min(2, "Degree must be at least 2 characters").max(200, "Degree name too long"),
   major: z.string().trim().max(100, "Major name too long").optional(),
   graduationDate: z.string().min(1, "Graduation date is required"),
+  certificateImageUrl: z.string().url("Invalid URL").optional().or(z.literal("")),
+  institutionId: z.string().trim().min(1, "Institution ID is required"),
 })
 
 interface MintProgress {
@@ -71,6 +74,7 @@ const IssueCredentialPage = () => {
     percent: 0,
     message: "",
   })
+  const [imagePreview, setImagePreview] = useState<string>("")
 
   const [formData, setFormData] = useState({
     studentName: "",
@@ -79,6 +83,8 @@ const IssueCredentialPage = () => {
     degree: "",
     major: "",
     graduationDate: "",
+    certificateImageUrl: "",
+    institutionId: "",
   })
 
   useEffect(() => {
@@ -88,10 +94,15 @@ const IssueCredentialPage = () => {
     }
 
     const loadInstitution = async () => {
-      const { data } = await supabase.from("institutions").select("name, configured").eq("user_id", user.id).single()
+      const { data } = await supabase
+        .from("institutions")
+        .select("id, name, configured")
+        .eq("user_id", user.id)
+        .single()
 
       if (data?.configured) {
         setIssuingInstitution(data.name)
+        setFormData((prev) => ({ ...prev, institutionId: data.id }))
         setInstitutionConfigured(true)
       }
 
@@ -100,6 +111,17 @@ const IssueCredentialPage = () => {
 
     loadInstitution()
   }, [user])
+
+  const handleWalletChange = async (walletAddress: string) => {
+    handleChange("studentWallet", walletAddress)
+
+    if (/^0x[a-fA-F0-9]{40}$/.test(walletAddress.trim())) {
+      const studentName = await getStudentNameByWallet(walletAddress.trim())
+      if (studentName && !formData.studentName) {
+        handleChange("studentName", studentName)
+      }
+    }
+  }
 
   const validateForm = () => {
     try {
@@ -143,13 +165,18 @@ const IssueCredentialPage = () => {
 
     try {
       const institution = issuingInstitution!
+      const institutionId = formData.institutionId
+
+      if (!institutionId) {
+        toast.error("Institution ID not found")
+        setIsSubmitting(false)
+        return
+      }
 
       let tokenId: number
       let txHash: string
 
-      // Check if wallet is connected for real minting
       if (wallet.isConnected && wallet.address) {
-        // Ensure we're on Flow EVM Testnet
         if (wallet.chainId !== FLOW_EVM_TESTNET.chainId) {
           toast.info("Switching to Flow EVM Testnet...")
           await switchToFlowTestnet()
@@ -157,11 +184,11 @@ const IssueCredentialPage = () => {
 
         setMintProgress({ stage: "minting", percent: 40, message: "Minting on blockchain..." })
 
-        // Create metadata URI (simple version without IPFS for now)
         const metadataUri = `data:application/json,${encodeURIComponent(
           JSON.stringify({
             name: `${formData.degree} - ${formData.studentName}`,
             description: `Academic credential issued by ${institution}`,
+            image: formData.certificateImageUrl || undefined,
             attributes: [
               { trait_type: "Degree", value: formData.degree },
               { trait_type: "University", value: institution },
@@ -171,21 +198,18 @@ const IssueCredentialPage = () => {
           }),
         )}`
 
-        // Mint on blockchain
         const mintResult = await mintCertificate(
           formData.studentWallet.trim(),
           formData.studentName.trim(),
           formData.degree.trim(),
           institution,
           metadataUri,
-          institution, // institutionId (dashboard flow uses institution name)
+          institutionId,
         )
 
         tokenId = mintResult.tokenId
         txHash = mintResult.txHash
       } else {
-        // Demo mode - generate mock values
-        setMintProgress({ stage: "minting", percent: 40, message: "Simulating blockchain transaction..." })
         await new Promise((resolve) => setTimeout(resolve, 1000))
         tokenId = Math.floor(Math.random() * 100000)
         txHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
@@ -193,7 +217,6 @@ const IssueCredentialPage = () => {
 
       setMintProgress({ stage: "saving", percent: 75, message: "Saving to database..." })
 
-      // Save to database
       const { error } = await supabase.from("credentials").insert({
         student_name: formData.studentName.trim(),
         student_wallet: formData.studentWallet.toLowerCase().trim(),
@@ -227,6 +250,19 @@ const IssueCredentialPage = () => {
     }
   }
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string
+        setImagePreview(dataUrl)
+        handleChange("certificateImageUrl", dataUrl)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
     toast.success(`${label} copied to clipboard`)
@@ -235,6 +271,7 @@ const IssueCredentialPage = () => {
   const resetForm = () => {
     setIssuedCredential(null)
     setMintProgress({ stage: "idle", percent: 0, message: "" })
+    setImagePreview("")
     setFormData({
       studentName: "",
       studentWallet: "",
@@ -242,6 +279,8 @@ const IssueCredentialPage = () => {
       degree: "",
       major: "",
       graduationDate: "",
+      certificateImageUrl: "",
+      institutionId: "",
     })
   }
 
@@ -264,7 +303,6 @@ const IssueCredentialPage = () => {
                 The credential has been minted and issued to {formData.studentName}.
               </p>
 
-              {/* Token ID - Primary */}
               <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl p-4 border border-primary/20 mb-4">
                 <p className="text-sm text-muted-foreground mb-1">Token ID (Use for Verification)</p>
                 <div className="flex items-center justify-center gap-3">
@@ -282,7 +320,6 @@ const IssueCredentialPage = () => {
                 </p>
               </div>
 
-              {/* Transaction Hash */}
               <div className="bg-white/[0.02] rounded-xl p-4 mb-6 text-left">
                 <p className="text-sm text-muted-foreground mb-1">Transaction Hash</p>
                 <div className="flex items-center gap-2">
@@ -376,13 +413,13 @@ const IssueCredentialPage = () => {
                   <input
                     type="text"
                     value={formData.studentWallet}
-                    onChange={(e) => handleChange("studentWallet", e.target.value)}
+                    onChange={(e) => handleWalletChange(e.target.value)}
                     placeholder="0x..."
                     className={`input-glass font-mono ${errors.studentWallet ? "border-destructive" : ""}`}
                   />
                   {errors.studentWallet && <p className="text-sm text-destructive mt-1">{errors.studentWallet}</p>}
                   <p className="text-xs text-muted-foreground mt-1">
-                    The credential will be issued to this wallet address
+                    The credential will be issued to this wallet address. Student name will auto-fill if found.
                   </p>
                 </div>
 
@@ -451,6 +488,38 @@ const IssueCredentialPage = () => {
                     className={`input-glass ${errors.graduationDate ? "border-destructive" : ""}`}
                   />
                   {errors.graduationDate && <p className="text-sm text-destructive mt-1">{errors.graduationDate}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    <span className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4" />
+                      Certificate Image (Optional)
+                    </span>
+                  </label>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="input-glass" />
+                  {imagePreview && (
+                    <div className="mt-3 relative">
+                      <img
+                        src={imagePreview || "/placeholder.svg"}
+                        alt="Certificate preview"
+                        className="max-h-48 rounded-lg border border-white/10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImagePreview("")
+                          handleChange("certificateImageUrl", "")
+                        }}
+                        className="absolute top-2 right-2 btn-secondary p-1"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload an image of the certificate to attach to the credential
+                  </p>
                 </div>
               </div>
 
