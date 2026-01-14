@@ -9,10 +9,10 @@ import BackButton from '@/components/BackButton';
 
 const RoleSelectPage = () => {
   const navigate = useNavigate();
-  const { user, roles, profile, isLoading, profileStatus, refreshProfile } = useAuth();
+  const { user, roles, profileStatus, isLoading, refreshProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if user already has a profile and role - they shouldn't see this page again
+  // 1. Redirect if user already has a role assigned - ensures they don't see this page again
   useEffect(() => {
     if (!isLoading && profileStatus === 'loaded' && user && roles.length > 0) {
       const primaryRole = roles[0];
@@ -26,7 +26,7 @@ const RoleSelectPage = () => {
     }
   }, [user, roles, profileStatus, isLoading, navigate]);
 
-  // If not authenticated, redirect to login
+  // 2. If not authenticated, redirect to login
   useEffect(() => {
     if (!isLoading && !user) {
       navigate('/login', { replace: true });
@@ -38,14 +38,17 @@ const RoleSelectPage = () => {
     
     setIsSubmitting(true);
     try {
-      // 1. Save the role to the user_roles table in DB
+      // ✅ FIX: Use upsert for roles to prevent duplicate key errors on double-clicks
       const { error: roleErr } = await supabase
         .from('user_roles')
-        .insert([{ user_id: user.id, role: roleId }]);
+        .upsert(
+          [{ user_id: user.id, role: roleId }],
+          { onConflict: 'user_id,role' }
+        );
       
       if (roleErr) throw roleErr;
 
-      // 2. Initialize/Update the profile record in DB
+      // ✅ FIX: Initialize/Update the profile record
       const { error: profileErr } = await supabase
         .from('profiles')
         .upsert({ 
@@ -95,10 +98,10 @@ const RoleSelectPage = () => {
     },
   ];
 
-  // ✅ FIX: Spinner Guard
-  // Only show spinner if we are globally loading OR currently fetching profile status
-  // OR if we are currently submitting the role to the database
-  if (isLoading || (user && profileStatus === 'loading') || isSubmitting) {
+  // ✅ FIX: Corrected Spinner Guard
+  // isLoading must be handled by the AuthContext fix we applied earlier.
+  // This page will render once isLoading is false and profileStatus is either 'missing' (new user) or 'loaded'.
+  if (isLoading || isSubmitting) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
