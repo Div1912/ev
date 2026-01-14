@@ -33,7 +33,7 @@ function toFriendlyAuthError(): Error {
 }
 
 /* =========================
-   CHECK WALLET (Keep for UI/Check Logic)
+   CHECK WALLET
 ========================= */
 export async function checkWalletExists(
   walletAddress: string
@@ -135,7 +135,7 @@ export async function verifySignature(
 }
 
 /* =========================
-   SIGNUP FLOW
+   SIGNUP FLOW (🔒 FIXED)
 ========================= */
 export async function signUpWithWallet(
   connectedWalletAddress: string
@@ -144,10 +144,10 @@ export async function signUpWithWallet(
   session: boolean
   isNewUser: boolean
 }> {
-  const { data } = await supabase.auth.getSession()
-  if (data.session?.user) {
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (sessionData.session?.user) {
     return {
-      user: data.session.user,
+      user: sessionData.session.user,
       session: true,
       isNewUser: false,
     }
@@ -165,24 +165,38 @@ export async function signUpWithWallet(
     'signup'
   )
 
-  const { error } = await supabase.auth.verifyOtp({
+  const { error: otpError } = await supabase.auth.verifyOtp({
     token_hash: verifyResult.token_hash,
     type: 'magiclink',
   })
 
-  if (error) {
+  if (otpError) {
     throw toFriendlyAuthError()
   }
 
+  // ✅ 1. FETCH USER AFTER OTP VERIFICATION
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw new Error("User missing after signup")
+  }
+
+  // ✅ 2. CREATE PROFILE SO WALLET-AUTH EDGE FUNCTION CAN FIND THE WALLET
+  // We use upsert to ensure we don't crash on retry attempts
+  await supabase.from("profiles").upsert({
+    user_id: user.id,
+    wallet_address: normalizedAddress,
+    onboarded: false,
+  })
+
   return {
-    user: verifyResult.user,
+    user: user,
     session: true,
     isNewUser: verifyResult.is_new_user,
   }
 }
 
 /* =========================
-   LOGIN FLOW (🔒 FIXED: TRUST VERIFY RESULT)
+   LOGIN FLOW
 ========================= */
 export async function loginWithWallet(
   connectedWalletAddress: string
@@ -191,11 +205,8 @@ export async function loginWithWallet(
   session: boolean
 }> {
   const normalizedAddress = connectedWalletAddress.toLowerCase()
-
-  // 🔧 Normalize address BEFORE signing message
   const signed = await signLoginMessage(normalizedAddress)
 
-  // ✅ TRUST: verifySignature will throw 'USER_NOT_FOUND' if the wallet isn't in DB
   const verifyResult = await verifySignature(
     {
       wallet_address: signed.wallet_address,
@@ -228,7 +239,7 @@ export async function signOutWallet(): Promise<void> {
 }
 
 /* =========================
-   GET AUTH WALLET (🔒 FIXED)
+   GET AUTH WALLET
 ========================= */
 export async function getAuthenticatedWallet(): Promise<string | null> {
   const {
