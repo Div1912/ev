@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -6,20 +7,23 @@ import {
   Search,
   ArrowRight,
   ArrowLeft,
+  Loader2
 } from 'lucide-react';
-import type { UserRole } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import PublicNavbar from '@/components/PublicNavbar';
 
 const SelectRolePage = () => {
   const navigate = useNavigate();
+  const { user, refreshProfile } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const roleConfigs = [
     {
       id: 'student' as UserRole,
       icon: GraduationCap,
       title: 'Student',
-      description:
-        'I want to manage and share my academic credentials with employers and institutions.',
+      description: 'I want to manage and share my academic credentials with employers and institutions.',
       path: '/onboarding/student',
       gradient: 'from-blue-500 to-cyan-500',
     },
@@ -27,8 +31,7 @@ const SelectRolePage = () => {
       id: 'issuer' as UserRole,
       icon: Building2,
       title: 'Institution',
-      description:
-        'I represent an educational institution and want to issue verifiable credentials.',
+      description: 'I represent an educational institution and want to issue verifiable credentials.',
       path: '/onboarding/institution',
       gradient: 'from-purple-500 to-pink-500',
     },
@@ -36,15 +39,46 @@ const SelectRolePage = () => {
       id: 'verifier' as UserRole,
       icon: Search,
       title: 'Verifier',
-      description:
-        'I need to verify academic credentials for hiring or background checks.',
+      description: 'I need to verify academic credentials for hiring or background checks.',
       path: '/onboarding/verifier',
       gradient: 'from-green-500 to-emerald-500',
     },
   ];
 
-  const handleRoleClick = (role: (typeof roleConfigs)[0]) => {
-    navigate(role.path);
+  const handleRoleClick = async (role: (typeof roleConfigs)[0]) => {
+    if (!user || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      // 1. UPDATE DATABASE: Set the role and initial onboarding status
+      const { error: roleErr } = await supabase
+        .from('user_roles')
+        .upsert([{ user_id: user.id, role: role.id }], { onConflict: 'user_id,role' });
+
+      if (roleErr) throw roleErr;
+
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert({ 
+          user_id: user.id, 
+          role: role.id, 
+          onboarded: false 
+        });
+
+      if (profileErr) throw profileErr;
+
+      // 2. NAVIGATE FIRST: Move to the next page immediately to "win" the race
+      navigate(role.path, { replace: true });
+
+      // 3. REFRESH CONTEXT: Update the global state in the background
+      setTimeout(() => {
+        refreshProfile();
+      }, 0);
+
+    } catch (err) {
+      console.error("Error saving role:", err);
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -57,7 +91,8 @@ const SelectRolePage = () => {
         <div className="w-full max-w-3xl mx-auto">
           <button
             onClick={() => navigate('/auth/sign-in')}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8"
+            disabled={isSubmitting}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8 disabled:opacity-50"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -84,13 +119,18 @@ const SelectRolePage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
                 onClick={() => handleRoleClick(role)}
-                className="glass-card p-6 text-left group transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+                disabled={isSubmitting}
+                className={`glass-card p-6 text-left group transition-all duration-300 hover:-translate-y-1 ${
+                  isSubmitting ? 'opacity-70 cursor-wait' : 'cursor-pointer'
+                }`}
               >
                 <div className="flex items-center gap-4">
-                  <div
-                    className={`w-14 h-14 rounded-xl bg-gradient-to-br ${role.gradient} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}
-                  >
-                    <role.icon className="w-7 h-7 text-white" />
+                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${role.gradient} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
+                    {isSubmitting ? (
+                      <Loader2 className="w-7 h-7 text-white animate-spin" />
+                    ) : (
+                      <role.icon className="w-7 h-7 text-white" />
+                    )}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
