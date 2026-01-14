@@ -1,12 +1,6 @@
 "use client"
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { loginWithWallet, signUpWithWallet } from "@/lib/walletAuth"
 import type { User, Session } from "@supabase/supabase-js"
@@ -74,17 +68,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfileLoaded(false)
 
     try {
-      const [{ data: profileData, error: profileError }, { data: rolesData, error: rolesError }] =
-        await Promise.all([
-          supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
-          supabase.from("user_roles").select("role").eq("user_id", user.id),
-        ])
+      const { data: profileData, error: profileError } = await supabase.auth.getSession()
+      if (!profileData.session?.user) {
+        throw new Error("No active session")
+      }
 
-      if (profileError) throw profileError
+      const userId = profileData.session.user.id
+
+      const [{ data: userRolesData, error: rolesError }] = await Promise.all([
+        supabase.from("user_roles").select("role").eq("user_id", userId),
+      ])
+
       if (rolesError) throw rolesError
 
-      setProfile((profileData as unknown as Profile) ?? null)
-      setRoles((rolesData ?? []).map((r) => r.role as UserRole))
+      const { data: fetchedProfile, error: fetchProfileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle()
+
+      if (fetchProfileError) throw fetchProfileError
+
+      const validProfile = fetchedProfile && fetchedProfile.user_id ? (fetchedProfile as unknown as Profile) : null
+      setProfile(validProfile)
+      setRoles((userRolesData ?? []).map((r) => r.role as UserRole))
     } catch (e) {
       console.error("refreshProfile failed:", e)
       setProfile(null)
@@ -182,10 +189,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [])
 
   useEffect(() => {
-    if (!isLoading && user) {
+    if (!isLoading && user && !profileLoaded) {
       refreshProfile()
     }
-  }, [user, isLoading])
+  }, [user, isLoading, profileLoaded])
 
   /* ---------------- HELPERS ---------------- */
 
@@ -199,7 +206,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const hasRole = (role: UserRole) => roles.includes(role)
-  
+
   // User is onboarded if they have at least one valid role (not 'pending')
   const isOnboarded = profileLoaded && roles.length > 0
 
