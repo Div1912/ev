@@ -26,7 +26,13 @@ import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import DashboardNavbar from "@/components/DashboardNavbar"
 import { z } from "zod"
-import { mintCertificate, switchToFlowTestnet, FLOW_EVM_TESTNET, getStudentNameByWallet } from "@/lib/web3"
+import {
+  mintCertificate,
+  switchToFlowTestnet,
+  FLOW_EVM_TESTNET,
+  getStudentNameByWallet,
+  verifyIssuerRegistration,
+} from "@/lib/web3"
 import { Progress } from "@/components/ui/progress"
 
 const credentialSchema = z.object({
@@ -115,10 +121,18 @@ const IssueCredentialPage = () => {
   const handleWalletChange = async (walletAddress: string) => {
     handleChange("studentWallet", walletAddress)
 
-    if (/^0x[a-fA-F0-9]{40}$/.test(walletAddress.trim())) {
-      const studentName = await getStudentNameByWallet(walletAddress.trim())
-      if (studentName && !formData.studentName) {
-        handleChange("studentName", studentName)
+    if (walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      try {
+        console.log("[v0] Looking up student for wallet:", walletAddress)
+        const studentName = await getStudentNameByWallet(walletAddress)
+        if (studentName) {
+          console.log("[v0] Auto-filling student name:", studentName)
+          handleChange("studentName", studentName)
+        } else {
+          console.log("[v0] No student name found for wallet, user must enter manually")
+        }
+      } catch (error) {
+        console.error("[v0] Error looking up student name:", error)
       }
     }
   }
@@ -158,6 +172,27 @@ const IssueCredentialPage = () => {
     if (!institutionConfigured || !issuingInstitution) {
       toast.error("Institution not configured")
       return
+    }
+
+    if (wallet.isConnected && wallet.address) {
+      setMintProgress({ stage: "preparing", percent: 5, message: "Verifying issuer registration..." })
+
+      try {
+        const isVerified = await verifyIssuerRegistration(wallet.address, formData.institutionId)
+        if (!isVerified) {
+          toast.error(
+            "Your wallet is not registered as an issuer for this institution on the blockchain. " +
+              "Please contact your institution administrator to authorize your wallet.",
+          )
+          setMintProgress({ stage: "idle", percent: 0, message: "" })
+          return
+        }
+      } catch (error) {
+        console.error("[v0] Verification check failed:", error)
+        toast.error("Failed to verify issuer registration")
+        setMintProgress({ stage: "idle", percent: 0, message: "" })
+        return
+      }
     }
 
     setIsSubmitting(true)
