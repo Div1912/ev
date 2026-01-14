@@ -3,33 +3,29 @@ import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { useWallet } from '@/contexts/WalletContext';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
-import { Wallet, Shield, AlertCircle, GraduationCap, Loader2, ArrowLeft, LogIn } from 'lucide-react';
+import { Wallet, Shield, AlertCircle, Loader2, ArrowLeft, LogIn } from 'lucide-react';
 import PublicNavbar from '@/components/PublicNavbar';
 
 /**
  * SIGN IN PAGE - For EXISTING USERS ONLY
- * 
- * Flow:
+ * * Flow:
  * 1. Connect wallet
  * 2. Sign message
  * 3. Login (fails if wallet doesn't exist)
  * 4. Redirect to appropriate dashboard based on role
- * 
- * NEVER shows role selection - that's only for signup
  */
 const SignInPage = () => {
   const navigate = useNavigate();
   const { wallet, connect, disconnect, isConnecting, error: walletError, isMetaMaskAvailable } = useWallet();
-  const { user, profile, roles, isAuthenticating, loginWallet, error: authError, isLoading, profileLoaded } = useAuth();
+  const { user, roles, isAuthenticating, loginWallet, error: authError, isLoading, profileLoaded } = useAuth();
   const [showMetaMaskWarning, setShowMetaMaskWarning] = useState(false);
   const [authStep, setAuthStep] = useState<'initial' | 'connected' | 'signing' | 'complete'>('initial');
 
-  // Handle redirect for authenticated users
+  // ✅ FIXED: Consolidated Redirect Logic
   useEffect(() => {
-    if (!isLoading && !profileLoaded) return;
-    
+    if (isLoading || !profileLoaded) return;
+
     if (user) {
-      // If user has roles, go to dashboard
       if (roles.length > 0) {
         const primaryRole = roles[0];
         const dashboardPaths: Record<UserRole, string> = {
@@ -39,12 +35,12 @@ const SignInPage = () => {
           admin: '/dashboard/admin',
         };
         navigate(dashboardPaths[primaryRole], { replace: true });
-      } else if (!profile?.onboarded) {
-        // User exists but not onboarded - redirect to complete onboarding
+      } else {
+        // User exists but has no roles assigned yet
         navigate('/onboarding/select-role', { replace: true });
       }
     }
-  }, [user, profile, roles, isLoading, profileLoaded, navigate]);
+  }, [user, roles, isLoading, profileLoaded, navigate]);
 
   // Update auth step when wallet connects
   useEffect(() => {
@@ -71,9 +67,9 @@ const SignInPage = () => {
     
     setAuthStep('signing');
     try {
-      await loginWallet(wallet.address);
+      // ✅ FIXED: Normalize address to lowercase to prevent "Account does not exist" mismatches
+      await loginWallet(wallet.address.toLowerCase());
       setAuthStep('complete');
-      // Redirect will be handled by useEffect
     } catch (err) {
       setAuthStep('connected');
       console.error('Login failed:', err);
