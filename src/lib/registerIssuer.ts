@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client"
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://ebwxwrqcnbgpgzavrfpj.supabase.co"
+const SUPABASE_FUNCTION_NAME = "register-issuer"
 
 interface RegisterIssuerResponse {
   success: boolean
@@ -12,43 +12,30 @@ interface RegisterIssuerResponse {
 }
 
 /**
- * Register an issuer on the blockchain via Supabase Edge Function
- * This function calls the backend which uses the contract owner's wallet
- * to authorize the new issuer on the smart contract.
+ * Register an issuer on the blockchain via Supabase Edge Function.
+ * Uses the contract owner's key server-side to authorize this issuer address.
  */
 export async function registerIssuerOnBlockchain(
   walletAddress: string,
-  institutionName: string,
+  institutionId: string,
 ): Promise<RegisterIssuerResponse> {
-  try {
-    // Get the current session for authentication
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  // Ensure caller is authenticated (functions.invoke will pass JWT automatically)
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-    if (sessionError || !sessionData.session) {
-      throw new Error("Not authenticated. Please sign in first.")
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/register-issuer`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${sessionData.session.access_token}`,
-      },
-      body: JSON.stringify({
-        wallet_address: walletAddress,
-        institution_name: institutionName,
-      }),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to register issuer")
-    }
-
-    return data
-  } catch (error) {
-    console.error("Register issuer error:", error)
-    throw error
+  if (sessionError || !sessionData.session) {
+    throw new Error("Not authenticated. Please sign in first.")
   }
+
+  const { data, error } = await supabase.functions.invoke(SUPABASE_FUNCTION_NAME, {
+    body: {
+      wallet_address: walletAddress,
+      institution_id: institutionId,
+    },
+  })
+
+  if (error) {
+    throw new Error(error.message || "Failed to register issuer")
+  }
+
+  return data as RegisterIssuerResponse
 }

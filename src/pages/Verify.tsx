@@ -100,6 +100,7 @@ const VerifyPage = () => {
           degree: dbData.degree,
           university: dbData.university,
           ipfsHash: dbData.ipfs_hash || '',
+          institutionId: dbData.university,
         });
         setVerificationSource('database');
         setIsVerifying(false);
@@ -113,6 +114,7 @@ const VerifyPage = () => {
           degree: 'Bachelor of Science in Computer Science',
           university: 'Massachusetts Institute of Technology',
           ipfsHash: 'ipfs://QmXxxxxx...example',
+          institutionId: 'demo',
         });
         setVerificationSource('demo');
       } else {

@@ -68,6 +68,19 @@ const InstitutionOnboarding = () => {
 
     try {
       /* =========================
+         0️⃣ REGISTER ON BLOCKCHAIN (NON-NEGOTIABLE)
+         Must succeed so issuer can mint.
+      ========================= */
+      const institutionId = formData.institutionName.trim()
+      const result = await registerIssuerOnBlockchain(walletAddress.toLowerCase(), institutionId)
+
+      if (result.already_registered) {
+        toast.success("Institution already authorized on blockchain")
+      } else {
+        toast.success("Institution authorized on blockchain")
+      }
+
+      /* =========================
          1️⃣ Update profile
       ========================= */
       const { error: profileError } = await supabase
@@ -106,31 +119,13 @@ const InstitutionOnboarding = () => {
           type: formData.institutionType,
           display_name: formData.displayName,
           configured: true,
-          verified: false, // keep false until admin verification
+          verified: false,
         },
         { onConflict: "user_id" },
       )
 
       if (institutionError) {
         throw new Error(institutionError.message)
-      }
-
-      /* =========================
-         4️⃣ REGISTER ON BLOCKCHAIN
-         Added automatic blockchain registration
-      ========================= */
-      try {
-        const result = await registerIssuerOnBlockchain(walletAddress.toLowerCase(), formData.institutionName)
-
-        if (result.already_registered) {
-          toast.success("Institution registered! (Already authorized on blockchain)")
-        } else {
-          toast.success("Institution registered and authorized on blockchain!")
-        }
-      } catch (contractError) {
-        console.error("Blockchain registration error:", contractError)
-        // Don't fail the whole registration if contract call fails
-        toast.warning("Institution registered in database. Blockchain authorization will be retried automatically.")
       }
 
       await refreshProfile()
