@@ -330,27 +330,57 @@ export const mintCertificate = async (
   university: string,
   certificateURI: string,
   institutionId: string,
-): Promise<string> => {
-  try {
-    const contract = await getContract(true)
-    console.log("[v0] Calling mintCertificate on contract:", CONTRACT_ADDRESS)
-    console.log("[v0] Params:", { recipient, studentName, degree, university, certificateURI, institutionId })
+): Promise<{ txHash: string; tokenId: number }> => {
+  const contract = await getContract(true)
 
-    const tx = await contract.mintCertificate(recipient, studentName, degree, university, certificateURI, institutionId)
-    console.log("[v0] Transaction sent:", tx.hash)
+  console.log("[v0] Calling mintCertificate on contract:", CONTRACT_ADDRESS)
+  console.log("[v0] Params:", { recipient, studentName, degree, university, certificateURI, institutionId })
+
+  try {
+    const tx = await contract.mintCertificate(
+      recipient,
+      studentName,
+      degree,
+      university,
+      certificateURI,
+      institutionId,
+    )
 
     const receipt = await tx.wait()
-    console.log("[v0] Transaction confirmed:", receipt?.hash)
-
     if (!receipt) {
       throw new Error("Transaction failed - no receipt received")
     }
 
-    return tx.hash
-  } catch (error: any) {
+    // Extract tokenId from CertificateMinted event
+    let tokenId: number | null = null
+    for (const log of receipt.logs ?? []) {
+      try {
+        const parsed = contract.interface.parseLog(log)
+        if (parsed?.name === "CertificateMinted") {
+          tokenId = Number(parsed.args?.tokenId)
+          break
+        }
+      } catch {
+        // ignore unrelated logs
+      }
+    }
+
+    if (tokenId === null || Number.isNaN(tokenId)) {
+      throw new Error("Mint succeeded but tokenId could not be parsed from logs")
+    }
+
+    return { txHash: tx.hash as string, tokenId }
+  } catch (error: unknown) {
+    const e = error as { message?: string }
     console.error("[v0] mintCertificate error:", error)
-    throw new Error(error.message || "Failed to mint certificate")
+    throw new Error(e?.message || "Failed to mint certificate")
   }
+}
+
+export const getIssuerInstitutionId = async (issuerAddress: string): Promise<string> => {
+  const info = await getIssuerInfo(issuerAddress)
+  // ethers v6 returns both array + named props depending on ABI
+  return (info?.institutionId ?? info?.[1] ?? "") as string
 }
 
 export const emergencyStop = async (): Promise<string> => {

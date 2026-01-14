@@ -178,7 +178,7 @@ const IssueCredentialPage = () => {
           formData.degree.trim(),
           institution,
           metadataUri,
-          institution, // institutionId - using institution name as the ID
+          institution, // institutionId (dashboard flow uses institution name)
         )
 
         tokenId = mintResult.tokenId
@@ -199,7 +199,7 @@ const IssueCredentialPage = () => {
         student_wallet: formData.studentWallet.toLowerCase().trim(),
         degree: formData.degree.trim(),
         university: institution,
-        issued_by: user.id,
+        issued_by: profile?.id ?? null,
         status: "verified",
         issued_at: new Date().toISOString(),
         token_id: tokenId,

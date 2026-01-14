@@ -162,9 +162,13 @@ const IssueCredential = () => {
           message: "Creating credential metadata...",
         })
 
-        const institutionId = profile?.institution || "Unknown"
+        // IMPORTANT: institutionId MUST match what was registered on-chain.
+        // We fetch it from the contract to prevent "Issuer institution mismatch".
+        const { getIssuerInstitutionId } = await import("@/lib/web3")
+        const institutionId = await getIssuerInstitutionId(wallet.address!)
+
         if (!institutionId) {
-          throw new Error("Institution information not found. Please update your profile.")
+          throw new Error("This institution wallet is not authorized on-chain yet. Please re-run Institution Onboarding.")
         }
 
         const metadata = {
@@ -205,9 +209,9 @@ const IssueCredential = () => {
           institutionId,
         })
 
-        let hash
+        let mint
         try {
-          hash = await mintCertificate(
+          mint = await mintCertificate(
             formData.recipientAddress,
             formData.studentName,
             formData.degree,
@@ -215,23 +219,14 @@ const IssueCredential = () => {
             metadataHash,
             institutionId,
           )
-          console.log("[v0] Mint successful, tx hash:", hash)
+          console.log("[v0] Mint successful:", mint)
         } catch (mintError: any) {
           console.error("[v0] Mint failed:", mintError)
           throw new Error(`Mint failed: ${mintError.message}`)
         }
 
-        setTxHash(hash)
-
-        // Save to Supabase database
-        setUploadProgress({
-          stage: "saving",
-          percent: 85,
-          message: "Saving credential to database...",
-        })
-
-        const generatedTokenId = Date.now() % 1000000
-        setTokenId(generatedTokenId)
+        setTxHash(mint.txHash)
+        setTokenId(mint.tokenId)
 
         const { error: dbError } = await supabase.from("credentials").insert({
           student_name: formData.studentName,
@@ -239,10 +234,9 @@ const IssueCredential = () => {
           degree: formData.degree,
           university: formData.university,
           ipfs_hash: metadataHash,
-          tx_hash: hash,
-          token_id: generatedTokenId,
+          tx_hash: mint.txHash,
+          token_id: mint.tokenId,
           issued_by: profile?.id || null,
-          institution_id: institutionId,
           status: "verified",
           issued_at: new Date().toISOString(),
         })

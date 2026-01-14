@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, user_id, role, onboarded')
-        .eq('wallet_address', normalizedAddress)
+        .ilike('wallet_address', normalizedAddress)
         .maybeSingle()
 
       if (error) {
@@ -164,11 +164,11 @@ Deno.serve(async (req) => {
 
       const email = `${normalizedAddress}@wallet.eduverify.local`
 
-      const { data: existingProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, user_id, role, onboarded')
-        .eq('wallet_address', normalizedAddress)
-        .maybeSingle()
+       const { data: existingProfile, error: profileError } = await supabase
+         .from('profiles')
+         .select('id, user_id, role, onboarded')
+         .ilike('wallet_address', normalizedAddress)
+         .maybeSingle()
 
       if (profileError) {
         console.error('Failed to lookup profile:', profileError)
