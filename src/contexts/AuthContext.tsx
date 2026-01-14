@@ -65,7 +65,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   /* ---------------- PROFILE FETCH ---------------- */
 
   const refreshProfile = async () => {
-    // Check for session specifically to ensure we are using the most current user data
     const { data: { session: currentSession } } = await supabase.auth.getSession()
     const activeUser = currentSession?.user || user
 
@@ -115,13 +114,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const result = await signUpWithWallet(walletAddress)
       
-      // ✅ FORCE session sync immediately after signature verification
       const { data: { session: syncSession } } = await supabase.auth.getSession()
       
       if (syncSession?.user) {
         setSession(syncSession)
         setUser(syncSession.user)
-        // Profile refresh is handled by the onAuthStateChange listener
       }
 
       return { isNewUser: result.isNewUser }
@@ -144,7 +141,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await loginWithWallet(walletAddress)
       
-      // ✅ FORCE session sync immediately after signature verification
       const { data: { session: syncSession } } = await supabase.auth.getSession()
       
       if (syncSession?.user) {
@@ -189,13 +185,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setSession(session)
       setUser(session?.user ?? null)
+      setIsLoading(false) // 🔥 REQUIRED FIX: Prevents infinite spinner on signup/login
 
       if (!session?.user) {
         setProfile(null)
         setRoles([])
         setProfileStatus("idle")
       } else {
-        // ✅ Single Source of Truth for profile refreshing
         refreshProfile()
       }
     })
