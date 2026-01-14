@@ -193,9 +193,7 @@ export async function loginWithWallet(
   user: any
   session: boolean
 }> {
-  // ✅ FIX: Removed early-return session guard to ensure full auth flow runs
-
-  // Ensure normalized for status check
+  // Always flow through verification to ensure AuthContext emits fresh state
   const normalizedAddress = connectedWalletAddress.toLowerCase()
   const walletStatus = await checkWalletExists(normalizedAddress)
 
@@ -203,7 +201,7 @@ export async function loginWithWallet(
     throw new Error('No account found with this wallet. Please sign up first.')
   }
 
-  // 🔧 FIX: Normalize address BEFORE signing message
+  // 🔧 Normalize address BEFORE signing message
   const signed = await signLoginMessage(normalizedAddress)
 
   const verifyResult = await verifySignature(
@@ -231,18 +229,6 @@ export async function loginWithWallet(
 }
 
 /* =========================
-   LEGACY
-========================= */
-export async function authenticateWithWallet(
-  connectedWalletAddress: string
-): Promise<{
-  user: VerifyResponse['user']
-  session: boolean
-}> {
-  return loginWithWallet(connectedWalletAddress)
-}
-
-/* =========================
    SIGN OUT
 ========================= */
 export async function signOutWallet(): Promise<void> {
@@ -250,12 +236,23 @@ export async function signOutWallet(): Promise<void> {
 }
 
 /* =========================
-   GET AUTH WALLET
+   GET AUTH WALLET (🔒 FIXED)
 ========================= */
 export async function getAuthenticatedWallet(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  return user?.user_metadata?.wallet_address || null
+  if (!user) return null
+
+  // ✅ Profiles is the source of truth for wallet addresses
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('wallet_address')
+    .eq('user_id', user.id)
+    .maybeSingle() // Use maybeSingle to handle potential missing profiles during signup
+
+  if (error) return null
+
+  return data?.wallet_address ?? null
 }
