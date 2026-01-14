@@ -44,7 +44,8 @@ interface AuthContextType {
 
   // helpers
   hasRole: (role: UserRole) => boolean
-  isOnboarded: boolean
+  hasSelectedRole: boolean // 🔥 NEW: True if the user has a record in user_roles
+  isOnboarded: boolean     // 🔥 CHANGED: True ONLY if profile.onboarded is true
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -185,7 +186,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setSession(session)
       setUser(session?.user ?? null)
-      setIsLoading(false) // 🔥 REQUIRED FIX: Prevents infinite spinner on signup/login
+      setIsLoading(false)
 
       if (!session?.user) {
         setProfile(null)
@@ -215,10 +216,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const hasRole = (role: UserRole) => roles.includes(role)
 
+  // 🔥 NEW HELPER: For routing logic to check if a user has picked a role yet
+  const hasSelectedRole = roles.length > 0
+
+  // 🔥 UPDATED HELPER: For routing logic to check if the user has finished the detail form
   const isOnboarded =
     profileStatus === "loaded" &&
-    profile?.onboarded === true &&
-    roles.length > 0
+    profile?.onboarded === true
 
   return (
     <AuthContext.Provider
@@ -236,6 +240,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signOut,
         refreshProfile,
         hasRole,
+        hasSelectedRole,
         isOnboarded,
       }}
     >
