@@ -71,12 +71,35 @@ const InstitutionOnboarding = () => {
 
     try {
       /* =========================
-         0️⃣ REGISTER ON BLOCKCHAIN (NON-NEGOTIABLE)
-         This MUST succeed before any database changes.
-         The institution name becomes the institutionId on blockchain.
+         0️⃣ CREATE INSTITUTION FIRST TO GET THE ID
+         We need the institution ID before registering on blockchain.
       ========================= */
-      const institutionId = formData.institutionName.trim()
+      const { data: institutionData, error: institutionCreateError } = await supabase
+        .from("institutions")
+        .insert({
+          user_id: user.id,
+          wallet_address: walletAddress.toLowerCase(),
+          name: formData.institutionName,
+          type: formData.institutionType,
+          display_name: formData.displayName,
+          configured: false,
+          verified: false,
+        })
+        .select("id")
+        .single()
 
+      if (institutionCreateError || !institutionData) {
+        throw new Error(`Failed to create institution: ${institutionCreateError?.message}`)
+      }
+
+      const institutionId = institutionData.id
+
+      console.log("[v0] Institution created with ID:", institutionId)
+
+      /* =========================
+         1️⃣ REGISTER ON BLOCKCHAIN WITH INSTITUTION ID
+         This MUST succeed before marking institution as configured.
+      ========================= */
       console.log("[v0] Starting blockchain registration for:", {
         walletAddress: walletAddress.toLowerCase(),
         institutionId,
@@ -89,6 +112,9 @@ const InstitutionOnboarding = () => {
       } catch (blockchainErr: any) {
         console.error("[v0] Blockchain registration failed:", blockchainErr)
         setBlockchainError(blockchainErr.message)
+
+        await supabase.from("institutions").delete().eq("id", institutionId)
+
         throw new Error(
           `Failed to register on blockchain: ${blockchainErr.message}. Your institution cannot mint credentials without blockchain registration.`,
         )
@@ -97,6 +123,9 @@ const InstitutionOnboarding = () => {
       if (!registrationResult.success && !registrationResult.already_registered) {
         const errorMsg = registrationResult.error || "Unknown blockchain error"
         setBlockchainError(errorMsg)
+
+        await supabase.from("institutions").delete().eq("id", institutionId)
+
         throw new Error(`Blockchain registration failed: ${errorMsg}`)
       }
 
@@ -107,7 +136,19 @@ const InstitutionOnboarding = () => {
       )
 
       /* =========================
-         1️⃣ Update profile
+         2️⃣ Update institution as configured
+      ========================= */
+      const { error: configError } = await supabase
+        .from("institutions")
+        .update({ configured: true })
+        .eq("id", institutionId)
+
+      if (configError) {
+        throw new Error(configError.message)
+      }
+
+      /* =========================
+         3️⃣ Update profile
       ========================= */
       const { error: profileError } = await supabase
         .from("profiles")
@@ -124,7 +165,7 @@ const InstitutionOnboarding = () => {
       }
 
       /* =========================
-         2️⃣ Assign issuer role
+         4️⃣ Assign issuer role
       ========================= */
       const { error: roleError } = await supabase
         .from("user_roles")
@@ -135,27 +176,7 @@ const InstitutionOnboarding = () => {
       }
 
       /* =========================
-         3️⃣ CREATE INSTITUTION
-      ========================= */
-      const { error: institutionError } = await supabase.from("institutions").upsert(
-        {
-          user_id: user.id,
-          wallet_address: walletAddress.toLowerCase(),
-          name: formData.institutionName,
-          type: formData.institutionType,
-          display_name: formData.displayName,
-          configured: true,
-          verified: false,
-        },
-        { onConflict: "user_id" },
-      )
-
-      if (institutionError) {
-        throw new Error(institutionError.message)
-      }
-
-      /* =========================
-         4️⃣ STORE BLOCKCHAIN REGISTRATION INFO
+         5️⃣ STORE BLOCKCHAIN REGISTRATION INFO
       ========================= */
       const { error: regError } = await supabase.from("issuer_registrations").upsert(
         {
@@ -173,6 +194,8 @@ const InstitutionOnboarding = () => {
         console.error("Warning: Failed to store registration info:", regError)
         // Don't fail the whole process if this fails
       }
+
+      console.log("[v0] Institution onboarding completed successfully for ID:", institutionId)
 
       await refreshProfile()
       navigate("/dashboard/institution", { replace: true })
