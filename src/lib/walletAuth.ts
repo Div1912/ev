@@ -155,7 +155,7 @@ export async function signUpWithWallet(
     }
   }
 
-  // 🔧 FIX 1: Normalize address BEFORE signing message
+  // 🔧 FIX: Normalize address BEFORE signing message
   const normalizedAddress = connectedWalletAddress.toLowerCase()
   const signed = await signLoginMessage(normalizedAddress)
 
@@ -193,14 +193,7 @@ export async function loginWithWallet(
   user: any
   session: boolean
 }> {
-  // 🔧 FIX 2: Guard login if auth session already exists
-  const { data: sessionData } = await supabase.auth.getSession()
-  if (sessionData.session?.user) {
-    return {
-      user: sessionData.session.user,
-      session: true,
-    }
-  }
+  // ✅ FIX: Removed early-return session guard to ensure full auth flow runs
 
   // Ensure normalized for status check
   const normalizedAddress = connectedWalletAddress.toLowerCase()
@@ -210,7 +203,7 @@ export async function loginWithWallet(
     throw new Error('No account found with this wallet. Please sign up first.')
   }
 
-  // 🔧 FIX 1: Normalize address BEFORE signing message
+  // 🔧 FIX: Normalize address BEFORE signing message
   const signed = await signLoginMessage(normalizedAddress)
 
   const verifyResult = await verifySignature(
