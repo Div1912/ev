@@ -323,6 +323,22 @@ export const verifyCertificate = async (tokenId: number): Promise<CertificateDet
   }
 }
 
+export const getStudentNameByWallet = async (walletAddress: string): Promise<string | null> => {
+  try {
+    const contract = await getContract(false)
+
+    // This would require a contract method that returns certificates by owner address
+    // Since the contract doesn't have this built-in, we'll need to track this in Supabase instead
+    // This is a placeholder that returns null - the actual lookup should be done via Supabase
+    console.log("[v0] getStudentNameByWallet called for:", walletAddress)
+
+    return null
+  } catch (error) {
+    console.error("[v0] Error getting student name by wallet:", error)
+    return null
+  }
+}
+
 export const mintCertificate = async (
   recipient: string,
   studentName: string,
@@ -337,14 +353,7 @@ export const mintCertificate = async (
   console.log("[v0] Params:", { recipient, studentName, degree, university, certificateURI, institutionId })
 
   try {
-    const tx = await contract.mintCertificate(
-      recipient,
-      studentName,
-      degree,
-      university,
-      certificateURI,
-      institutionId,
-    )
+    const tx = await contract.mintCertificate(recipient, studentName, degree, university, certificateURI, institutionId)
 
     const receipt = await tx.wait()
     if (!receipt) {
