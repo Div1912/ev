@@ -51,7 +51,7 @@ const ProtectedRoute = ({
    * Force new users who haven't picked a role to the selection page.
    */
   if (user && !hasSelectedRole) {
-    // Exact path check to prevent redirect loops
+    // Exact path check to prevent unnecessary redirects during transitions
     if (path !== "/onboarding/select-role") {
       return <Navigate to="/onboarding/select-role" replace />
     }
@@ -60,12 +60,19 @@ const ProtectedRoute = ({
 
   /**
    * 4. ONBOARDING COMPLETION ENFORCEMENT
-   * Allow users to stay on their specific onboarding form if not fully onboarded.
+   * User has picked a role but hasn't finished details (isOnboarded is false).
+   * ✅ FIX: Explicitly allow staying on the select-role page OR the role-specific form.
+   * This allows the "Navigate-First" pattern to complete before the context refresh.
    */
   if (user && hasSelectedRole && !isOnboarded) {
+    // If the roles array is still empty due to race condition, allow them to stay on the page
+    if (roles.length === 0) {
+      return <>{children}</>
+    }
+
     const expectedOnboardingPath = `/onboarding/${roles[0]}`
     
-    // Allow the specific onboarding page OR the select-role page during transition
+    // Allow the specific onboarding page OR the transition from the selection page
     if (path === expectedOnboardingPath || path === "/onboarding/select-role") {
       return <>{children}</>
     }
@@ -92,7 +99,7 @@ const ProtectedRoute = ({
 
   /**
    * 6. ROLE AUTHORIZATION (SAFE)
-   * Role checks are only enforced AFTER onboarding is complete to avoid race conditions.
+   * Role checks only enforced AFTER onboarding is complete to avoid race conditions.
    */
   if (requiredRole && isOnboarded && !hasRole(requiredRole)) {
     return <Navigate to="/unauthorized" replace />
