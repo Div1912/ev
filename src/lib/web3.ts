@@ -1,4 +1,5 @@
 import { ethers } from "ethers"
+import { supabase } from "@/integrations/supabase/client"
 
 // Contract ABI for AcademicCredentialNFT (eduverify-2.sol)
 export const CONTRACT_ABI = [
@@ -325,17 +326,57 @@ export const verifyCertificate = async (tokenId: number): Promise<CertificateDet
 
 export const getStudentNameByWallet = async (walletAddress: string): Promise<string | null> => {
   try {
-    const contract = await getContract(false)
+    console.log("[v0] Looking up student name for wallet:", walletAddress)
 
-    // This would require a contract method that returns certificates by owner address
-    // Since the contract doesn't have this built-in, we'll need to track this in Supabase instead
-    // This is a placeholder that returns null - the actual lookup should be done via Supabase
-    console.log("[v0] getStudentNameByWallet called for:", walletAddress)
+    // Query the profiles table for a wallet address to get the display name
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .ilike("wallet_address", walletAddress.toLowerCase())
+      .maybeSingle()
 
+    if (error) {
+      console.error("[v0] Error querying student name:", error)
+      return null
+    }
+
+    if (data?.display_name) {
+      console.log("[v0] Found student name:", data.display_name)
+      return data.display_name
+    }
+
+    console.log("[v0] No display name found for wallet:", walletAddress)
     return null
   } catch (error) {
     console.error("[v0] Error getting student name by wallet:", error)
     return null
+  }
+}
+
+export const verifyIssuerRegistration = async (
+  issuerAddress: string,
+  expectedInstitutionId: string,
+): Promise<boolean> => {
+  try {
+    const contract = await getContract(false)
+    const issuerInfo = await contract.getIssuerInfo(issuerAddress)
+
+    // Check if issuer is authorized and institution ID matches
+    const isAuthorized = issuerInfo?.authorized ?? issuerInfo?.[2] ?? false
+    const registeredInstitutionId = issuerInfo?.institutionId ?? issuerInfo?.[1] ?? ""
+
+    console.log("[v0] Issuer verification:", {
+      address: issuerAddress,
+      isAuthorized,
+      registeredInstitutionId,
+      expectedInstitutionId,
+      match: registeredInstitutionId === expectedInstitutionId,
+    })
+
+    return isAuthorized && registeredInstitutionId === expectedInstitutionId
+  } catch (error) {
+    console.error("[v0] Error verifying issuer registration:", error)
+    return false
   }
 }
 
@@ -348,9 +389,20 @@ export const mintCertificate = async (
   institutionId: string,
 ): Promise<{ txHash: string; tokenId: number }> => {
   const contract = await getContract(true)
+  const signer = await new ethers.BrowserProvider(window.ethereum!).getSigner()
+  const issuerAddress = await signer.getAddress()
 
   console.log("[v0] Calling mintCertificate on contract:", CONTRACT_ADDRESS)
+  console.log("[v0] Issuer address:", issuerAddress)
   console.log("[v0] Params:", { recipient, studentName, degree, university, certificateURI, institutionId })
+
+  const isVerified = await verifyIssuerRegistration(issuerAddress, institutionId)
+  if (!isVerified) {
+    throw new Error(
+      `Your wallet (${issuerAddress}) is not registered as an issuer for institution "${institutionId}". ` +
+        "Please contact your institution administrator to register your wallet on the blockchain.",
+    )
+  }
 
   try {
     const tx = await contract.mintCertificate(recipient, studentName, degree, university, certificateURI, institutionId)
