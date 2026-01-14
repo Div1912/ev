@@ -78,6 +78,7 @@ export async function signLoginMessage(
     throw toFriendlyAuthError()
   }
 
+  // Comparison is safe here because we ensure both are lowercase
   if (activeAddress.toLowerCase() !== connectedWalletAddress.toLowerCase()) {
     throw toFriendlyAuthError()
   }
@@ -140,19 +141,23 @@ export async function verifySignature(
 export async function signUpWithWallet(
   connectedWalletAddress: string
 ): Promise<{
-  user: VerifyResponse['user']
+  user: any
   session: boolean
   isNewUser: boolean
 }> {
-  const walletStatus = await checkWalletExists(connectedWalletAddress)
-
-  if (walletStatus.exists) {
-    throw new Error(
-      'An account already exists with this wallet. Please log in instead.'
-    )
+  // 🔒 FIX: if auth session already exists, do NOT block signup
+  const { data } = await supabase.auth.getSession()
+  if (data.session?.user) {
+    return {
+      user: data.session.user,
+      session: true,
+      isNewUser: false,
+    }
   }
 
-  const signed = await signLoginMessage(connectedWalletAddress)
+  // 🔧 FIX 1: Normalize address BEFORE signing message
+  const normalizedAddress = connectedWalletAddress.toLowerCase()
+  const signed = await signLoginMessage(normalizedAddress)
 
   const verifyResult = await verifySignature(
     {
@@ -185,16 +190,28 @@ export async function signUpWithWallet(
 export async function loginWithWallet(
   connectedWalletAddress: string
 ): Promise<{
-  user: VerifyResponse['user']
+  user: any
   session: boolean
 }> {
-  const walletStatus = await checkWalletExists(connectedWalletAddress)
+  // 🔧 FIX 2: Guard login if auth session already exists
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (sessionData.session?.user) {
+    return {
+      user: sessionData.session.user,
+      session: true,
+    }
+  }
+
+  // Ensure normalized for status check
+  const normalizedAddress = connectedWalletAddress.toLowerCase()
+  const walletStatus = await checkWalletExists(normalizedAddress)
 
   if (!walletStatus.exists) {
     throw new Error('No account found with this wallet. Please sign up first.')
   }
 
-  const signed = await signLoginMessage(connectedWalletAddress)
+  // 🔧 FIX 1: Normalize address BEFORE signing message
+  const signed = await signLoginMessage(normalizedAddress)
 
   const verifyResult = await verifySignature(
     {
