@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { useNavigate } from "react-router-dom"
-import { Building2, Loader2, ArrowRight } from "lucide-react"
+import { Building2, Loader2, ArrowRight, AlertCircle } from "lucide-react"
 
 import { useAuth } from "@/contexts/AuthContext"
 import { useWallet } from "@/contexts/WalletContext"
@@ -23,7 +23,8 @@ import { registerIssuerOnBlockchain } from "@/lib/registerIssuer"
  * - Assign issuer role
  * - Update profile
  * - CREATE institution record
- * - Register issuer on blockchain
+ * - Register issuer on blockchain (CRITICAL)
+ * - Store registration info
  */
 const InstitutionOnboarding = () => {
   const navigate = useNavigate()
@@ -31,6 +32,7 @@ const InstitutionOnboarding = () => {
   const { wallet } = useWallet()
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [blockchainError, setBlockchainError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     institutionName: "",
@@ -65,20 +67,44 @@ const InstitutionOnboarding = () => {
     }
 
     setIsSubmitting(true)
+    setBlockchainError(null)
 
     try {
       /* =========================
          0️⃣ REGISTER ON BLOCKCHAIN (NON-NEGOTIABLE)
-         Must succeed so issuer can mint.
+         This MUST succeed before any database changes.
+         The institution name becomes the institutionId on blockchain.
       ========================= */
       const institutionId = formData.institutionName.trim()
-      const result = await registerIssuerOnBlockchain(walletAddress.toLowerCase(), institutionId)
 
-      if (result.already_registered) {
-        toast.success("Institution already authorized on blockchain")
-      } else {
-        toast.success("Institution authorized on blockchain")
+      console.log("[v0] Starting blockchain registration for:", {
+        walletAddress: walletAddress.toLowerCase(),
+        institutionId,
+      })
+
+      let registrationResult
+      try {
+        registrationResult = await registerIssuerOnBlockchain(walletAddress.toLowerCase(), institutionId)
+        console.log("[v0] Blockchain registration successful:", registrationResult)
+      } catch (blockchainErr: any) {
+        console.error("[v0] Blockchain registration failed:", blockchainErr)
+        setBlockchainError(blockchainErr.message)
+        throw new Error(
+          `Failed to register on blockchain: ${blockchainErr.message}. Your institution cannot mint credentials without blockchain registration.`,
+        )
       }
+
+      if (!registrationResult.success && !registrationResult.already_registered) {
+        const errorMsg = registrationResult.error || "Unknown blockchain error"
+        setBlockchainError(errorMsg)
+        throw new Error(`Blockchain registration failed: ${errorMsg}`)
+      }
+
+      toast.success(
+        registrationResult.already_registered
+          ? "Institution already authorized on blockchain"
+          : "Institution registered on blockchain successfully!",
+      )
 
       /* =========================
          1️⃣ Update profile
@@ -128,8 +154,27 @@ const InstitutionOnboarding = () => {
         throw new Error(institutionError.message)
       }
 
-      await refreshProfile()
+      /* =========================
+         4️⃣ STORE BLOCKCHAIN REGISTRATION INFO
+      ========================= */
+      const { error: regError } = await supabase.from("issuer_registrations").upsert(
+        {
+          user_id: user.id,
+          wallet_address: walletAddress.toLowerCase(),
+          institution_name: formData.institutionName,
+          transaction_hash: registrationResult.transaction_hash || null,
+          block_number: registrationResult.block_number || null,
+          registered_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      )
 
+      if (regError) {
+        console.error("Warning: Failed to store registration info:", regError)
+        // Don't fail the whole process if this fails
+      }
+
+      await refreshProfile()
       navigate("/dashboard/institution", { replace: true })
     } catch (err: any) {
       console.error("Institution onboarding error:", err)
@@ -161,6 +206,20 @@ const InstitutionOnboarding = () => {
               <p className="text-muted-foreground">Set up your institution to start issuing credentials</p>
             </div>
 
+            {blockchainError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-start gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/30 mb-6"
+              >
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-destructive">Blockchain Registration Failed</p>
+                  <p className="text-sm text-muted-foreground mt-1">{blockchainError}</p>
+                </div>
+              </motion.div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium mb-2">
@@ -170,8 +229,12 @@ const InstitutionOnboarding = () => {
                   className="input-glass"
                   value={formData.institutionName}
                   onChange={(e) => setFormData({ ...formData, institutionName: e.target.value })}
+                  placeholder="e.g., Oxford University"
                   required
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This will be registered on blockchain as your institution ID
+                </p>
               </div>
 
               <div>
@@ -209,7 +272,7 @@ const InstitutionOnboarding = () => {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Registering Institution...
+                    Registering Institution on Blockchain...
                   </>
                 ) : (
                   <>
@@ -218,6 +281,10 @@ const InstitutionOnboarding = () => {
                   </>
                 )}
               </button>
+
+              <p className="text-xs text-center text-muted-foreground">
+                Your institution will be registered on the blockchain to enable certificate minting
+              </p>
             </form>
           </div>
         </motion.div>
