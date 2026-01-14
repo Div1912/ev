@@ -16,7 +16,7 @@ const ProtectedRoute = ({
   const {
     user,
     isLoading,
-    profileLoaded,
+    profileStatus,
     isOnboarded,
     roles,
     hasRole,
@@ -25,10 +25,12 @@ const ProtectedRoute = ({
   const location = useLocation()
   const path = location.pathname
 
-  /* --------------------------------------------------
-   * HARD STOP: WAIT FOR AUTH BOOTSTRAP
-   * -------------------------------------------------- */
-  if (isLoading) {
+  /**
+   * 1. HARD STOP: AUTH BOOTSTRAP
+   * We only show the spinner if the app is initializing OR 
+   * a user exists but we are actively fetching their profile.
+   */
+  if (isLoading || (user && profileStatus === 'loading')) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -36,39 +38,31 @@ const ProtectedRoute = ({
     )
   }
 
-  /* --------------------------------------------------
-   * AUTH REQUIRED
-   * -------------------------------------------------- */
+  /**
+   * 2. AUTH ENFORCEMENT
+   * Redirect unauthenticated users back to the sign-in page.
+   */
   if (requireAuth && !user) {
-    return <Navigate to="/auth/sign-in" replace />
+    return <Navigate to="/auth/sign-in" state={{ from: location }} replace />
   }
 
-  /* --------------------------------------------------
-   * PROFILE NOT READY (ONLY AFTER USER EXISTS)
-   * -------------------------------------------------- */
-  if (user && !profileLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  /* --------------------------------------------------
-   * FORCE ONBOARDING (NEW USERS)
-   * -------------------------------------------------- */
-  if (user && profileLoaded && !isOnboarded) {
+  /**
+   * 3. ONBOARDING ENFORCEMENT
+   * If the profile is 'missing' (new user) or onboarding is incomplete,
+   * they MUST be on an onboarding route.
+   */
+  if (user && (profileStatus === 'missing' || !isOnboarded)) {
     if (!path.startsWith("/onboarding")) {
       return <Navigate to="/onboarding/select-role" replace />
     }
     return <>{children}</>
   }
 
-  /* --------------------------------------------------
-   * BLOCK ONBOARDING AFTER COMPLETION
-   * -------------------------------------------------- */
+  /**
+   * 4. BLOCK ONBOARDING AFTER COMPLETION
+   * Stop fully onboarded users from accessing setup pages.
+   */
   if (user && isOnboarded && path.startsWith("/onboarding")) {
-    // Redirect to the appropriate dashboard based on role
     const roleDashboards: Record<string, string> = {
       student: '/dashboard/student',
       issuer: '/dashboard/institution',
@@ -80,21 +74,16 @@ const ProtectedRoute = ({
     return <Navigate to={targetDashboard} replace />
   }
 
-  /* --------------------------------------------------
-   * ROLE AUTHORIZATION - Redirect to /unauthorized
-   * -------------------------------------------------- */
+  /**
+   * 5. ROLE AUTHORIZATION
+   */
   if (requiredRole && !hasRole(requiredRole)) {
-    // If user has no roles, send to onboarding
     if (roles.length === 0) {
       return <Navigate to="/onboarding/select-role" replace />
     }
-    // Otherwise, redirect to unauthorized page
     return <Navigate to="/unauthorized" replace />
   }
 
-  /* --------------------------------------------------
-   * ACCESS GRANTED
-   * -------------------------------------------------- */
   return <>{children}</>
 }
 
