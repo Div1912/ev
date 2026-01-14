@@ -94,12 +94,86 @@ export type Database = {
           },
         ]
       }
+      institutions: {
+        Row: {
+          configured: boolean | null
+          created_at: string | null
+          display_name: string | null
+          id: string
+          name: string
+          type: string | null
+          updated_at: string | null
+          user_id: string
+          verified: boolean | null
+          wallet_address: string
+        }
+        Insert: {
+          configured?: boolean | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          name: string
+          type?: string | null
+          updated_at?: string | null
+          user_id: string
+          verified?: boolean | null
+          wallet_address: string
+        }
+        Update: {
+          configured?: boolean | null
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          name?: string
+          type?: string | null
+          updated_at?: string | null
+          user_id?: string
+          verified?: boolean | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      issuer_registrations: {
+        Row: {
+          block_number: number | null
+          created_at: string | null
+          id: string
+          institution_name: string
+          registered_at: string | null
+          transaction_hash: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          block_number?: number | null
+          created_at?: string | null
+          id?: string
+          institution_name: string
+          registered_at?: string | null
+          transaction_hash?: string | null
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          block_number?: number | null
+          created_at?: string | null
+          id?: string
+          institution_name?: string
+          registered_at?: string | null
+          transaction_hash?: string | null
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
           display_name: string | null
           id: string
           institution: string | null
+          institution_type: string | null
+          onboarded: boolean
           role: string
           updated_at: string
           user_id: string | null
@@ -110,6 +184,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           institution?: string | null
+          institution_type?: string | null
+          onboarded?: boolean
           role: string
           updated_at?: string
           user_id?: string | null
@@ -120,6 +196,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           institution?: string | null
+          institution_type?: string | null
+          onboarded?: boolean
           role?: string
           updated_at?: string
           user_id?: string | null
