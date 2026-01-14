@@ -33,7 +33,7 @@ function toFriendlyAuthError(): Error {
 }
 
 /* =========================
-   CHECK WALLET
+   CHECK WALLET (Keep for UI/Check Logic)
 ========================= */
 export async function checkWalletExists(
   walletAddress: string
@@ -78,7 +78,6 @@ export async function signLoginMessage(
     throw toFriendlyAuthError()
   }
 
-  // Comparison is safe here because we ensure both are lowercase
   if (activeAddress.toLowerCase() !== connectedWalletAddress.toLowerCase()) {
     throw toFriendlyAuthError()
   }
@@ -145,7 +144,6 @@ export async function signUpWithWallet(
   session: boolean
   isNewUser: boolean
 }> {
-  // 🔒 FIX: if auth session already exists, do NOT block signup
   const { data } = await supabase.auth.getSession()
   if (data.session?.user) {
     return {
@@ -155,7 +153,6 @@ export async function signUpWithWallet(
     }
   }
 
-  // 🔧 FIX: Normalize address BEFORE signing message
   const normalizedAddress = connectedWalletAddress.toLowerCase()
   const signed = await signLoginMessage(normalizedAddress)
 
@@ -185,7 +182,7 @@ export async function signUpWithWallet(
 }
 
 /* =========================
-   LOGIN FLOW
+   LOGIN FLOW (🔒 FIXED: TRUST VERIFY RESULT)
 ========================= */
 export async function loginWithWallet(
   connectedWalletAddress: string
@@ -193,17 +190,12 @@ export async function loginWithWallet(
   user: any
   session: boolean
 }> {
-  // Always flow through verification to ensure AuthContext emits fresh state
   const normalizedAddress = connectedWalletAddress.toLowerCase()
-  const walletStatus = await checkWalletExists(normalizedAddress)
-
-  if (!walletStatus.exists) {
-    throw new Error('No account found with this wallet. Please sign up first.')
-  }
 
   // 🔧 Normalize address BEFORE signing message
   const signed = await signLoginMessage(normalizedAddress)
 
+  // ✅ TRUST: verifySignature will throw 'USER_NOT_FOUND' if the wallet isn't in DB
   const verifyResult = await verifySignature(
     {
       wallet_address: signed.wallet_address,
@@ -219,7 +211,7 @@ export async function loginWithWallet(
   })
 
   if (error) {
-    throw toFriendlyAuthError()
+    throw new Error('Login failed. Please try again.')
   }
 
   return {
@@ -245,12 +237,11 @@ export async function getAuthenticatedWallet(): Promise<string | null> {
 
   if (!user) return null
 
-  // ✅ Profiles is the source of truth for wallet addresses
   const { data, error } = await supabase
     .from('profiles')
     .select('wallet_address')
     .eq('user_id', user.id)
-    .maybeSingle() // Use maybeSingle to handle potential missing profiles during signup
+    .maybeSingle() 
 
   if (error) return null
 
