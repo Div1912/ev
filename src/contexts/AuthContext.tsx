@@ -56,8 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [roles, setRoles] = useState<UserRole[]>([])
 
-  const [profileStatus, setProfileStatus] =
-    useState<ProfileStatus>("idle")
+  const [profileStatus, setProfileStatus] = useState<ProfileStatus>("idle")
 
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
@@ -66,7 +65,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   /* ---------------- PROFILE FETCH ---------------- */
 
   const refreshProfile = async () => {
-    if (!user) {
+    // Check for session specifically to ensure we are using the most current user data
+    const { data: { session: currentSession } } = await supabase.auth.getSession()
+    const activeUser = currentSession?.user || user
+
+    if (!activeUser) {
       setProfile(null)
       setRoles([])
       setProfileStatus("idle")
@@ -76,18 +79,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProfileStatus("loading")
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.user) {
-        setProfile(null)
-        setRoles([])
-        setProfileStatus("missing")
-        return
-      }
-
-      const userId = session.user.id
+      const userId = activeUser.id
 
       const [rolesRes, profileRes] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", userId),
@@ -100,17 +92,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setRoles((rolesRes.data ?? []).map((r) => r.role as UserRole))
 
       if (!profileRes.data) {
-        setProfile(null)
-        setProfileStatus("missing")
+        setProfile(null);
+        setProfileStatus("missing");
       } else {
-        setProfile(profileRes.data as Profile)
-        setProfileStatus("loaded")
+        setProfile(profileRes.data as Profile);
+        setProfileStatus("loaded");
       }
     } catch (e) {
-      console.error("refreshProfile error:", e)
-      setProfile(null)
-      setRoles([])
-      setProfileStatus("error")
+      console.error("refreshProfile error:", e);
+      setProfileStatus("error");
     }
   }
 
@@ -124,6 +114,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const result = await signUpWithWallet(walletAddress)
+      
+      // ✅ FORCE session sync immediately after signature verification
+      const { data: { session: syncSession } } = await supabase.auth.getSession()
+      
+      if (syncSession?.user) {
+        setSession(syncSession)
+        setUser(syncSession.user)
+        // Profile refresh is handled by the onAuthStateChange listener
+      }
+
       return { isNewUser: result.isNewUser }
     } catch (e: any) {
       setError(e?.message || "Sign up failed")
@@ -143,6 +143,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       await loginWithWallet(walletAddress)
+      
+      // ✅ FORCE session sync immediately after signature verification
+      const { data: { session: syncSession } } = await supabase.auth.getSession()
+      
+      if (syncSession?.user) {
+        setSession(syncSession)
+        setUser(syncSession.user)
+      }
     } catch (e: any) {
       setError(e?.message || "Login failed")
       throw e
@@ -187,6 +195,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setRoles([])
         setProfileStatus("idle")
       } else {
+        // ✅ Single Source of Truth for profile refreshing
         refreshProfile()
       }
     })
