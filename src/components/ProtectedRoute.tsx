@@ -28,8 +28,7 @@ const ProtectedRoute = ({
 
   /**
    * 1. HARD STOP: AUTH BOOTSTRAP
-   * We only show the spinner if the app is initializing OR 
-   * a user exists but we are actively fetching their profile.
+   * Show spinner during initial auth check or active profile fetching.
    */
   if (isLoading || (user && profileStatus === 'loading')) {
     return (
@@ -41,7 +40,7 @@ const ProtectedRoute = ({
 
   /**
    * 2. AUTH ENFORCEMENT
-   * Redirect unauthenticated users back to the sign-in page.
+   * Send unauthenticated users to the sign-in page.
    */
   if (requireAuth && !user) {
     return <Navigate to="/auth/sign-in" state={{ from: location }} replace />
@@ -49,11 +48,11 @@ const ProtectedRoute = ({
 
   /**
    * 3. ROLE SELECTION ENFORCEMENT
-   * If the user is logged in but has NOT picked a role yet (new account),
-   * they MUST be on the role selection page.
+   * Force new users who haven't picked a role to the selection page.
    */
   if (user && !hasSelectedRole) {
-    if (!path.startsWith("/onboarding/select-role")) {
+    // Exact path check to prevent redirect loops
+    if (path !== "/onboarding/select-role") {
       return <Navigate to="/onboarding/select-role" replace />
     }
     return <>{children}</>
@@ -61,21 +60,23 @@ const ProtectedRoute = ({
 
   /**
    * 4. ONBOARDING COMPLETION ENFORCEMENT
-   * If the user has picked a role but hasn't finished the detail form (isOnboarded is false),
-   * they are allowed to be on onboarding sub-pages (e.g., /onboarding/student).
+   * Allow users to stay on their specific onboarding form if not fully onboarded.
    */
-  if (user && !isOnboarded) {
-    if (!path.startsWith("/onboarding")) {
-      // Safety: Send them back to their chosen role's onboarding sub-page
-      const primaryRole = roles[0];
-      return <Navigate to={`/onboarding/${primaryRole}`} replace />
+  if (user && hasSelectedRole && !isOnboarded) {
+    const expectedOnboardingPath = `/onboarding/${roles[0]}`
+    
+    // Allow the specific onboarding page OR the select-role page during transition
+    if (path === expectedOnboardingPath || path === "/onboarding/select-role") {
+      return <>{children}</>
     }
-    return <>{children}</>
+    
+    // Safety redirect to their specific form
+    return <Navigate to={expectedOnboardingPath} replace />
   }
 
   /**
    * 5. BLOCK ONBOARDING AFTER COMPLETION
-   * Stop fully onboarded users from accessing setup pages.
+   * Fully onboarded users are redirected away from setup pages to their dashboard.
    */
   if (user && isOnboarded && path.startsWith("/onboarding")) {
     const roleDashboards: Record<string, string> = {
@@ -91,14 +92,15 @@ const ProtectedRoute = ({
 
   /**
    * 6. ROLE AUTHORIZATION (SAFE)
-   * ✅ FIX: Only enforce role checks AFTER onboarding is complete.
-   * This prevents race conditions where the 'roles' array might be 
-   * empty during the final transition to the dashboard.
+   * Role checks are only enforced AFTER onboarding is complete to avoid race conditions.
    */
   if (requiredRole && isOnboarded && !hasRole(requiredRole)) {
     return <Navigate to="/unauthorized" replace />
   }
 
+  /**
+   * 7. ACCESS GRANTED
+   */
   return <>{children}</>
 }
 
