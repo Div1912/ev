@@ -70,6 +70,20 @@ const InstitutionOnboarding = () => {
     setBlockchainError(null)
 
     try {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          role: "issuer",
+          display_name: formData.displayName,
+          institution: formData.institutionName,
+          onboarded: true,
+        })
+        .eq("user_id", user.id)
+
+      if (profileError) {
+        throw new Error(profileError.message)
+      }
+
       /* =========================
          0️⃣ CREATE INSTITUTION FIRST TO GET THE ID
          We need the institution ID before registering on blockchain.
@@ -148,24 +162,7 @@ const InstitutionOnboarding = () => {
       }
 
       /* =========================
-         3️⃣ Update profile
-      ========================= */
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          role: "issuer",
-          display_name: formData.displayName,
-          institution: formData.institutionName,
-          onboarded: true,
-        })
-        .eq("user_id", user.id)
-
-      if (profileError) {
-        throw new Error(profileError.message)
-      }
-
-      /* =========================
-         4️⃣ Assign issuer role
+         3️⃣ Assign issuer role
       ========================= */
       const { error: roleError } = await supabase
         .from("user_roles")
@@ -176,7 +173,7 @@ const InstitutionOnboarding = () => {
       }
 
       /* =========================
-         5️⃣ STORE BLOCKCHAIN REGISTRATION INFO
+         4️⃣ STORE BLOCKCHAIN REGISTRATION INFO
       ========================= */
       const { error: regError } = await supabase.from("issuer_registrations").upsert(
         {
