@@ -44,7 +44,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    // ✅ FIX: route using BODY, not URL
     const body = await req.json()
     const action = body.action
 
@@ -56,18 +55,9 @@ Deno.serve(async (req) => {
     }
 
     /* =========================
-       NONCE / MESSAGE
+        NONCE / MESSAGE
     ========================= */
     if (action === 'nonce') {
-      const { wallet_address } = body
-
-      if (!wallet_address || !isValidAddress(wallet_address)) {
-        return new Response(JSON.stringify({ error: 'Invalid wallet address' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
       return new Response(JSON.stringify({ message: SIGN_MESSAGE }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -75,7 +65,7 @@ Deno.serve(async (req) => {
     }
 
     /* =========================
-       CHECK WALLET
+        CHECK WALLET
     ========================= */
     if (action === 'check-wallet') {
       const { wallet_address } = body
@@ -87,12 +77,14 @@ Deno.serve(async (req) => {
         })
       }
 
+      // ✅ FIX 1: Strict lowercase normalization for reliable lookup
       const normalizedAddress = wallet_address.toLowerCase()
 
+      // ✅ FIX 2: Query profiles table specifically (not auth.users)
       const { data, error } = await supabase
         .from('profiles')
         .select('id, user_id, role, onboarded')
-        .ilike('wallet_address', normalizedAddress)
+        .eq('wallet_address', normalizedAddress)
         .maybeSingle()
 
       if (error) {
@@ -117,7 +109,7 @@ Deno.serve(async (req) => {
     }
 
     /* =========================
-       VERIFY SIGNATURE
+        VERIFY SIGNATURE
     ========================= */
     if (action === 'verify') {
       const { wallet_address, signature, message, mode = 'login' } =
@@ -142,6 +134,7 @@ Deno.serve(async (req) => {
         })
       }
 
+      // ✅ FIX 3: Always normalize wallet address to lowercase
       const normalizedAddress = wallet_address.toLowerCase()
 
       let recoveredAddress: string
@@ -164,11 +157,12 @@ Deno.serve(async (req) => {
 
       const email = `${normalizedAddress}@wallet.eduverify.local`
 
-       const { data: existingProfile, error: profileError } = await supabase
-         .from('profiles')
-         .select('id, user_id, role, onboarded')
-         .ilike('wallet_address', normalizedAddress)
-         .maybeSingle()
+      // ✅ FIX 4: Use .eq() with normalized address for source-of-truth lookup
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, user_id, role, onboarded')
+        .eq('wallet_address', normalizedAddress)
+        .maybeSingle()
 
       if (profileError) {
         console.error('Failed to lookup profile:', profileError)
@@ -246,10 +240,10 @@ Deno.serve(async (req) => {
         userEmail = newUser.user.email ?? email
         isNewUser = true
 
+        // ✅ FIX 5: Create the profile row immediately to bridge auth and DB
         await supabase.from('profiles').insert({
           user_id: userId,
           wallet_address: normalizedAddress,
-          role: 'pending',
           onboarded: false,
         })
       } else {
