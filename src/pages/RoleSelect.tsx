@@ -1,19 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Building2, Search, ArrowRight } from 'lucide-react';
+import { GraduationCap, Building2, Search, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import Navbar from '@/components/Navbar';
 import BackButton from '@/components/BackButton';
 
 const RoleSelectPage = () => {
   const navigate = useNavigate();
-  const { user, roles, profile, isLoading } = useAuth();
+  const { user, roles, profile, isLoading, profileStatus, refreshProfile } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if user already has a profile - they shouldn't see this page again
+  // Redirect if user already has a profile and role - they shouldn't see this page again
   useEffect(() => {
-    if (!isLoading && user && profile && roles.length > 0) {
-      // Redirect to their primary dashboard
+    if (!isLoading && profileStatus === 'loaded' && user && roles.length > 0) {
       const primaryRole = roles[0];
       const dashboardPaths: Record<UserRole, string> = {
         student: '/student/dashboard',
@@ -23,7 +24,7 @@ const RoleSelectPage = () => {
       };
       navigate(dashboardPaths[primaryRole], { replace: true });
     }
-  }, [user, profile, roles, isLoading, navigate]);
+  }, [user, roles, profileStatus, isLoading, navigate]);
 
   // If not authenticated, redirect to login
   useEffect(() => {
@@ -31,6 +32,41 @@ const RoleSelectPage = () => {
       navigate('/login', { replace: true });
     }
   }, [user, isLoading, navigate]);
+
+  const handleRoleClick = async (roleId: UserRole, path: string) => {
+    if (!user) return;
+    
+    setIsSubmitting(true);
+    try {
+      // 1. Save the role to the user_roles table in DB
+      const { error: roleErr } = await supabase
+        .from('user_roles')
+        .insert([{ user_id: user.id, role: roleId }]);
+      
+      if (roleErr) throw roleErr;
+
+      // 2. Initialize/Update the profile record in DB
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .upsert({ 
+          user_id: user.id, 
+          role: roleId,
+          onboarded: false 
+        });
+
+      if (profileErr) throw profileErr;
+
+      // 3. Refresh the AuthContext so the app knows the user now has a role
+      await refreshProfile();
+
+      // 4. Navigate to the specific onboarding form for that role
+      navigate(path);
+    } catch (err) {
+      console.error("Error saving role:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const roleConfigs = [
     {
@@ -59,14 +95,13 @@ const RoleSelectPage = () => {
     },
   ];
 
-  const handleRoleClick = (role: typeof roleConfigs[0]) => {
-    navigate(role.path);
-  };
-
-  if (isLoading) {
+  // ✅ FIX: Spinner Guard
+  // Only show spinner if we are globally loading OR currently fetching profile status
+  // OR if we are currently submitting the role to the database
+  if (isLoading || (user && profileStatus === 'loading') || isSubmitting) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -101,8 +136,11 @@ const RoleSelectPage = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                onClick={() => handleRoleClick(role)}
-                className="glass-card p-6 text-left group transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+                onClick={() => handleRoleClick(role.id, role.path)}
+                disabled={isSubmitting}
+                className={`glass-card p-6 text-left group transition-all duration-300 hover:-translate-y-1 ${
+                  isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                }`}
               >
                 <div className="flex items-center gap-4">
                   <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${role.gradient} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
